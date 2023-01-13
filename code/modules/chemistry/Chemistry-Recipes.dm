@@ -1281,7 +1281,7 @@ datum
 			name = "Dragon's Breath"
 			id = "dbreath"
 			result = "dbreath"
-			required_reagents = list("bourbon" = 1, "phlogiston" = 1, "pyrosium" = 1, "fuel" = 1, "ghostchilijuice"= 1)
+			required_reagents = list("bourbon" = 1, "fuel" = 1)
 			result_amount = 1
 			mix_phrase = "A tiny mushroom cloud erupts from the container. That's not worrying at all!"
 			mix_sound = 'sound/impact_sounds/Generic_Hit_Heavy_1.ogg'
