@@ -16,6 +16,7 @@
 	icon = 'icons/obj/meteor_shield.dmi'
 	icon_state = "energyShield"
 	density = FALSE
+	power_usage = 5
 	var/orientation = HORIZONTAL  //shield extend direction 0 = north/south, 1 = east/west
 	power_level = SHIELD_BLOCK_GAS //1 for atmos shield, 2 for liquid, 3 for solid material
 	var/max_power = SHIELD_BLOCK_ALL
@@ -31,7 +32,6 @@
 	New()
 		..()
 		display_active.icon_state = "energyShieldOn"
-		src.power_usage = 5
 
 	get_desc(dist, mob/user)
 		..()
@@ -43,7 +43,15 @@
 			. += "It seems to be missing a usable battery."
 		. += "The unit will consume [get_draw()] power a second."
 		. += "The range setting is set to [src.range]."
-		. += "The power setting is set to [src.power_level]."
+		. += "The power setting is set to [src.power_level] ("
+		switch(src.power_level)
+			if(SHIELD_BLOCK_GAS)
+				. += "blocking gas"
+			if(SHIELD_BLOCK_FLUID)
+				. += "blocking gas and liquids"
+			if(SHIELD_BLOCK_ALL)
+				. += "blocking everything"
+		. += ")."
 
 	shield_on()
 		if (PCEL && PCEL.charge > 0) //first, try to activate off cell power
@@ -58,7 +66,7 @@
 
 	pulse(var/mob/user)
 		if(active)
-			boutput(user, "<span class='alert'>You can't change the power level or range while the generator is active.</span>")
+			boutput(user, SPAN_ALERT("You can't change the power level or range while the generator is active."))
 			return
 		var/list/choices = list("Set Range")
 		if(max_power != min_power)
@@ -77,11 +85,11 @@
 					if(!the_level)
 						return
 					if(BOUNDS_DIST(user, src) > 0)
-						boutput(user, "<span class='alert'>You flail your arms at [src] from across the room like a complete muppet. Move closer, genius!</span>")
+						boutput(user, SPAN_ALERT("You flail your arms at [src] from across the room like a complete muppet. Move closer, genius!"))
 						return
 					the_level = clamp(the_level, min_power, max_power)
 					src.power_level = the_level
-					boutput(user, "<span class='notice'>You set the power level to [src.power_level].</span>")
+					boutput(user, SPAN_NOTICE("You set the power level to [src.power_level]."))
 
 	//Code for placing the shields and adding them to the generator's shield list
 	proc/generate_shield()
@@ -107,7 +115,7 @@
 				if (src.checkForcefieldAllowed(T))
 					createForcefieldObject(xa, ya);
 
-		src.anchored = TRUE
+		src.anchored = ANCHORED
 		src.active = TRUE
 
 		// update_nearby_tiles()
@@ -187,7 +195,7 @@
 			if(!D.linked_forcefield && !istype(D,/obj/machinery/door/firedoor))
 				createDoorForcefield(D)
 
-		src.anchored = 1
+		src.anchored = ANCHORED
 		src.active = 1
 
 		// update_nearby_tiles()
@@ -248,7 +256,7 @@
 				animate(shield, time=5 SECONDS, loop=-1, easing=SINE_EASING, color="#88FF00")
 				animate(time=5 SECONDS, loop=-1, easing=SINE_EASING, color="#0088FF")
 
-		src.anchored = TRUE
+		src.anchored = ANCHORED
 		src.active = TRUE
 
 		playsound(src.loc, src.sound_on, 50, 1)

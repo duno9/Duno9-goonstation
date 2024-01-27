@@ -2,7 +2,7 @@
 
 /obj/machinery/computer/announcement
 	name = "Announcement Computer"
-	icon_state = "comm"
+	icon_state = "announcement"
 	machine_registry_idx = MACHINES_ANNOUNCEMENTS
 	circuit_type = /obj/item/circuitboard/announcement
 	var/announcement_delay = 1200
@@ -38,7 +38,7 @@
 	attack_hand(mob/user)
 		if(..()) return
 		if(isghostdrone(user))
-			boutput(user, "<span class='alert'>Your processors refuse to interact with this machine!</span>")
+			boutput(user, SPAN_ALERT("Your processors refuse to interact with this machine!"))
 			return 1
 		src.add_dialog(user)
 		var/dat = {"
@@ -63,12 +63,12 @@
 		if (istype(W, /obj/item/card/id))
 			if (src.ID)
 				src.ID.set_loc(src.loc)
-				boutput(user, "<span class='notice'>[src.ID] is ejected from the ID scanner.</span>")
+				boutput(user, SPAN_NOTICE("[src.ID] is ejected from the ID scanner."))
 			user.drop_item()
 			W.set_loc(src)
 			src.ID = W
 			src.unlocked = check_access(ID, 1)
-			boutput(user, "<span class='notice'>You insert [W].</span>")
+			boutput(user, SPAN_NOTICE("You insert [W]."))
 			return
 		..()
 
@@ -101,7 +101,7 @@
 
 		else if(href_list["edit_message"])
 			inhibit_updates = 1
-			message = copytext( html_decode(trim(strip_html(html_decode(input("Select what you wish to announce.", "Announcement."))))), 1, 280 )
+			message = html_encode(trim(tgui_input_text(usr, "Select what you wish to announce.", "Announcement", message, max_length=400)))
 			if(url_regex?.Find(message)) message = ""
 			inhibit_updates = 0
 			playsound(src.loc, "keyboard", 50, 1, -15)
@@ -180,6 +180,8 @@
 		if (!user)
 			return
 		var/newalert = tgui_input_text(user, "Please enter a new arrival alert message. Valid tokens: $NAME, $JOB, $STATION, $THEY, $THEM, $THEIR", "Custom Arrival Alert", src.arrivalalert)
+		if (!in_interact_range(src, user))
+			return
 		if (!newalert)
 			return
 		if (!findtext(newalert, "$NAME"))
@@ -206,6 +208,8 @@
 	proc/announce_arrival(var/mob/living/person)
 		if (!src.announces_arrivals)
 			return 1
+		if ((person.traitHolder.hasTrait("stowaway")) || (person.traitHolder.hasTrait("pilot")) || (person.traitHolder.hasTrait("sleepy")))
+			return 1 //people who have been on the ship the whole time, or who aren't on the ship, won't be announced
 		if (!src.announcement_radio)
 			src.announcement_radio = new(src)
 

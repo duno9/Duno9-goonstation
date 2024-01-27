@@ -88,7 +88,7 @@ var/global/list/playersSeen = list()
 
 	//Are any of the details...different? This is to catch out ban evading jerks who change their ckey but forget to mask their IP or whatever
 	var/timeAdded = 0
-	if (!expired && (row["ckey"] != ckey || row["ip"] != ip || row["compID"] != compID)) //Insert a new ban for this JERK
+	if (!expired && (row["ckey"] != ckey || (row["ip"] != ip && row["ip"] != "N/A") || (row["compID"] != compID && row["compID"] != "N/A"))) //Insert a new ban for this JERK
 		var/newChain = 0
 		if (text2num(row["previous"]) > 0) //if we matched a previous auto-added ban
 			if (text2num(row["chain"]) > 0)
@@ -103,8 +103,8 @@ var/global/list/playersSeen = list()
 		var/remaining = (timestamp > 0 ? timestamp - CMinutes : timestamp)
 		var/addData[] = new()
 		addData["ckey"] = ckey
-		addData["compID"] = row["compID"] || null // don't record CID if the original ban doesn't have one down
-		addData["ip"] = row["ip"] || null // don't record ip if the original ban doesn't have one down
+		addData["compID"] = (row["compID"] == "N/A" ? "N/A" : compID) // don't record CID if the original ban doesn't have one down
+		addData["ip"] = (row["ip"] == "N/A" ? "N/A" : ip) // don't record ip if the original ban doesn't have one down
 		addData["reason"] = row["reason"]
 		addData["oakey"] = row["oakey"]
 		addData["akey"] = "Auto Banner"
@@ -168,15 +168,15 @@ var/global/list/playersSeen = list()
 				targetC = C
 
 		row["reason"] = html_decode(row["reason"])
-
-		if (text2num(row["chain"]) > 0) //Prepend our evasion attempt info for: the user, admins, notes (everything except the actual ban reason in the db)
+		var/chain = text2num(row["chain"])
+		if (chain > 0) //Prepend our evasion attempt info for: the user, admins, notes (everything except the actual ban reason in the db)
 			row["reason"] = "\[Evasion Attempt x[row["chain"]]\] Previous Reason: [row["reason"]]"
 
 		var/replacement_text
 		if (targetC)
 			targetC.mob.unlock_medal("Banned", FALSE)
-			boutput(targetC, "<span class='alert'><BIG><B>You have been banned by [row["akey"]].<br>Reason: [row["reason"]]</B></BIG></span>")
-			boutput(targetC, "<span class='alert'>To try to resolve this matter head to https://forum.ss13.co</span>")
+			boutput(targetC, SPAN_ALERT("<BIG><B>You have been banned by [row["akey"]].<br>Reason: [row["reason"]]</B></BIG>"))
+			boutput(targetC, SPAN_ALERT("To try to resolve this matter head to https://forum.ss13.co"))
 		else
 			replacement_text = "[row["ckey"]] (IP: [row["ip"]], CompID: [row["compID"]])"
 
@@ -191,11 +191,11 @@ var/global/list/playersSeen = list()
 		if (text2num(row["timestamp"]) <= 0)
 			if (targetC)
 				if(duration == "Permanent")
-					boutput(targetC, "<span class='alert'>You have received a permanent ban, you can't appeal this ban until 30 days have passed.</span>")
+					boutput(targetC, SPAN_ALERT("You have received a permanent ban, you can't appeal this ban until 30 days have passed."))
 				else if(duration == "Until Appeal")
-					boutput(targetC, "<span class='alert'>You have received a ban. Make an <a href='https://forum.ss13.co/forumdisplay.php?fid=54'>appeal on the forums</a> to have it lifted.</span>")
+					boutput(targetC, SPAN_ALERT("You have received a ban. Make an <a href='https://forum.ss13.co/forumdisplay.php?fid=54'>appeal on the forums</a> to have it lifted."))
 				else
-					boutput(targetC, "<span class='alert'>You have received a ban. Duration: [duration]</span>")
+					boutput(targetC, SPAN_ALERT("You have received a ban. Duration: [duration]"))
 			logTheThing(LOG_ADMIN, adminC, "has banned [targetC ? "[constructTarget(targetC,"admin")]" : replacement_text] [serverLogSnippet]. duration: [duration] Reason: [row["reason"]].")
 			logTheThing(LOG_DIARY, adminC, "has banned [targetC ? "[constructTarget(targetC,"diary")]" : replacement_text] [serverLogSnippet]. duration: [duration] Reason: [row["reason"]].", "admin")
 			var/adminMsg = "<span class='notice'>"
@@ -203,7 +203,7 @@ var/global/list/playersSeen = list()
 			adminMsg += " has banned [targetC ? targetC : replacement_text] [serverLogSnippet].<br>Reason: [row["reason"]]</span>"
 			message_admins(adminMsg)
 		else
-			if (targetC) boutput(targetC, "<span class='alert'>This is a temporary ban, it will be removed in [expiry].</span>")
+			if (targetC) boutput(targetC, SPAN_ALERT("This is a temporary ban, it will be removed in [expiry]."))
 			logTheThing(LOG_ADMIN, adminC, "has banned [targetC ? "[constructTarget(targetC,"admin")]" : replacement_text] [serverLogSnippet]. Reason: [row["reason"]]. This will be removed in [expiry].")
 			logTheThing(LOG_DIARY, adminC, "has banned [targetC ? "[constructTarget(targetC,"diary")]" : replacement_text] [serverLogSnippet]. Reason: [row["reason"]]. This will be removed in [expiry].", "admin")
 			var/adminMsg = "<span class='notice'>"
@@ -214,16 +214,23 @@ var/global/list/playersSeen = list()
 		if (row["ckey"] && row["ckey"] != "N/A")
 			addPlayerNote(row["ckey"], row["akey"], "Banned [serverLogSnippet] by [row["akey"]], reason: [row["reason"]], duration: [duration]")
 
+		if(!targetC)
+			targetC = find_player(row["ckey"])?.client
+
 		var/ircmsg[] = new()
 		ircmsg["key"] = row["akey"]
 		ircmsg["key2"] = "[row["ckey"]] (IP: [row["ip"]], CompID: [row["compID"]])"
 		ircmsg["msg"] = row["reason"]
+		if (chain > 0) //if we're auto-banning them
+			//fuck it, we get the player directly, surely this can't fail
+			var/datum/player/player = make_player(row["ckey"])
+			if (!player)
+				logTheThing(LOG_DEBUG, null, "Unable to find player for auto-banner rounds participated logging, ckey: [row["ckey"]]")
+			ircmsg["msg"] += "\n\nRounds participated: [player?.get_rounds_participated()]"
 		ircmsg["time"] = expiry
 		ircmsg["timestamp"] = row["timestamp"]
 		ircbot.export_async("ban", ircmsg)
 
-		if(!targetC)
-			targetC = find_player(row["ckey"])?.client
 		if (targetC)
 			del(targetC)
 		else
@@ -274,39 +281,41 @@ var/global/list/playersSeen = list()
 		var/data[] = new()
 
 		if (!mobRef)
-			data["ckey"] = input(src, "Ckey (lowercase, only alphanumeric, no spaces, leave blank to skip)", "Ban") as null|text
-			var/auto = alert("Attempt to autofill IP and compID with most recent?","Autofill?","Yes","No")
-			if (auto == "No")
-				data["compID"] = input(src, "Computer ID", "Ban") as null|text
-				data["ip"] = input(src, "IP Address", "Ban") as null|text
-			else if (data["ckey"])
+			data["ckey"] = ckey(input(src, "Ckey, leave blank to skip", "Ban") as null|text)
+			var/auto_fill
+			if (data["ckey"])
+				auto_fill = alert("Attempt to autofill IP and compID with most recent?","Autofill?","Yes","No")
+			if (auto_fill == "Yes")
 				var/list/response
 				try
 					response = apiHandler.queryAPI("playerInfo/get", list("ckey" = data["ckey"]), forceResponse = 1)
 				catch ()
-					boutput(src, "<span class='alert'>Failed to query API, try again later.</span>")
+					boutput(src, SPAN_ALERT("Failed to query API, try again later."))
 					return
 				if (text2num(response["seen"]) < 1)
-					boutput(src, "<span class='alert'>No data found for target, IP and/or compID will be left blank.</span>")
+					boutput(src, SPAN_ALERT("No data found for target, IP and/or compID will be left blank."))
 				data["ip"] = response["last_ip"]
 				data["compID"] = response["last_compID"]
+			else
+				data["compID"] = input(src, "Computer ID", "Ban") as null|text
+				data["ip"] = input(src, "IP Address", "Ban") as null|text
 		else
 			data["ckey"] = M.ckey
 			data["compID"] = M.computer_id
 			data["ip"] = M.lastKnownIP
 
 		if (!data["ckey"] && !data["ip"] && !data["compID"])
-			boutput(src, "<span class='alert'>You need to input a ckey or IP or computer ID, all cannot be blank.</span>")
+			boutput(src, SPAN_ALERT("You need to input a ckey or IP or computer ID, all cannot be blank."))
 			return null
 
-		boutput(src, "<span class='alert'><b>You are currently banning the following player:</b></span>")
+		boutput(src, SPAN_ALERT("<b>You are currently banning the following player:</b>"))
 		boutput(src, "<b>Mob:</b> [mobRef ? M.name : "N/A"]")
 		boutput(src, "<b>Key:</b> [data["ckey"] ? data["ckey"] : "N/A"] (IP: [data["ip"] ? data["ip"] : "N/A"], CompID: [data["compID"] ? data["compID"] : "N/A"])")
-		boutput(src, "<span class='alert'><b>Make sure this is who you want to ban before continuing!</b></span>")
+		boutput(src, SPAN_ALERT("<b>Make sure this is who you want to ban before continuing!</b>"))
 
 		var/reason = input(src,"Reason for ban?","Ban") as null|text
 		if(!reason)
-			boutput(src, "<span class='alert'>You need to enter a reason for the ban.</span>")
+			boutput(src, SPAN_ALERT("You need to enter a reason for the ban."))
 			return
 		data["reason"] = reason
 
@@ -342,10 +351,10 @@ var/global/list/playersSeen = list()
 			else
 				var/cust_mins = input(src,"How many minutes? (1440 = one day)","BAN HE",1440) as null|num
 				if(!cust_mins)
-					boutput(src, "<span class='alert'>No time entered, cancelling ban.</span>")
+					boutput(src, SPAN_ALERT("No time entered, cancelling ban."))
 					return null
 				if(cust_mins >= 525600)
-					boutput(src, "<span class='alert'>Ban time too long. Ban shortened to one year (525599 minutes).</span>")
+					boutput(src, SPAN_ALERT("Ban time too long. Ban shortened to one year (525599 minutes)."))
 					mins = 525599
 				else
 					mins = cust_mins
@@ -401,7 +410,7 @@ var/global/list/playersSeen = list()
 
 		logTheThing(LOG_ADMIN, adminC, "edited [constructTarget(target,"admin")]'s ban. Reason: [row["reason"]] Duration: [duration] [serverLogSnippet]")
 		logTheThing(LOG_DIARY, adminC, "edited [constructTarget(target,"diary")]'s ban. Reason: [row["reason"]] Duration: [duration] [serverLogSnippet]", "admin")
-		message_admins("<span class='internal'>[key_name(adminC)] edited [target]'s ban. Reason: [row["reason"]] Duration: [duration] [serverLogSnippet]</span>")
+		message_admins(SPAN_INTERNAL("[key_name(adminC)] edited [target]'s ban. Reason: [row["reason"]] Duration: [duration] [serverLogSnippet]"))
 
 		var/ircmsg[] = new()
 		ircmsg["key"] = (isclient(adminC) && adminC.key ? adminC.key : adminC)
@@ -442,12 +451,12 @@ var/global/list/playersSeen = list()
 		data["ip"] = input(src, "IP Address", "Ban", ip) as null|text
 
 		if (!data["ckey"] && !data["ip"] && !data["compID"])
-			boutput(src, "<span class='alert'>You need to input a ckey or a compID or an IP, all cannot be blank.</span>")
+			boutput(src, SPAN_ALERT("You need to input a ckey or a compID or an IP, all cannot be blank."))
 			return
 
 		var/reason = input(src,"Reason for ban?","Ban", oreason) as null|text
 		if(!reason)
-			boutput(src, "<span class='alert'>You need to enter a reason for the ban.</span>")
+			boutput(src, SPAN_ALERT("You need to enter a reason for the ban."))
 			return
 		data["reason"] = reason
 
@@ -481,10 +490,10 @@ var/global/list/playersSeen = list()
 			else
 				var/cust_mins = input(src,"How many minutes? (1440 = one day)","BAN HE",remaining ? remaining : 1440) as null|num
 				if(!cust_mins)
-					boutput(src, "<span class='alert'>No time entered, cancelling ban.</span>")
+					boutput(src, SPAN_ALERT("No time entered, cancelling ban."))
 					return
 				if(cust_mins >= 525600)
-					boutput(src, "<span class='alert'>Ban time too long. Ban shortened to one year (525599 minutes).</span>")
+					boutput(src, SPAN_ALERT("Ban time too long. Ban shortened to one year (525599 minutes)."))
 					mins = 525599
 				else
 					mins = cust_mins
@@ -526,11 +535,11 @@ var/global/list/playersSeen = list()
 		if (expired)
 			logTheThing(LOG_ADMIN, null, "[row["ckey"]]'s ban expired.")
 			logTheThing(LOG_DIARY, null, "[row["ckey"]]'s ban expired.", "admin")
-			message_admins("<span class='internal'>Ban expired for [target]</span>")
+			message_admins(SPAN_INTERNAL("Ban expired for [target]"))
 		else
 			logTheThing(LOG_ADMIN, adminC, "unbanned [row["ckey"]]")
 			logTheThing(LOG_DIARY, adminC, "unbanned [row["ckey"]]", "admin")
-			message_admins("<span class='internal'>[key_name(adminC)] unbanned [target]</span>")
+			message_admins(SPAN_INTERNAL("[key_name(adminC)] unbanned [target]"))
 
 		var/ircmsg[] = new()
 		ircmsg["key"] = (isclient(adminC) && adminC.key ? adminC.key : adminC)
@@ -597,11 +606,11 @@ var/global/list/playersSeen = list()
 		if (expired)
 			logTheThing(LOG_ADMIN, null, "[row["ckey"]]'s ban expired.")
 			logTheThing(LOG_DIARY, null, "[row["ckey"]]'s ban expired.", "admin")
-			message_admins("<span class='internal'>Ban expired for [target]</span>")
+			message_admins(SPAN_INTERNAL("Ban expired for [target]"))
 		else
 			logTheThing(LOG_ADMIN, adminC, "unbanned [row["ckey"]]")
 			logTheThing(LOG_DIARY, adminC, "unbanned [row["ckey"]]", "admin")
-			message_admins("<span class='internal'>[key_name(adminC)] unbanned [target]</span>")
+			message_admins(SPAN_INTERNAL("[key_name(adminC)] unbanned [target]"))
 
 		var/ircmsg[] = new()
 		ircmsg["key"] = (isclient(adminC) && adminC.key ? adminC.key : adminC)
@@ -690,7 +699,7 @@ var/global/list/playersSeen = list()
 	if (fexists(banLog))
 		//Here we fetch the latest logID, increment it, then append our data as json
 		var/list/log = dd_file2list(banLog)
-		var/lastIndex = (log.len > 1 ? log.len - 1 : 1)
+		var/lastIndex = (length(log) > 1 ? log.len - 1 : 1)
 		var/lastRow = log[lastIndex]
 		var/list/rowDetails = splittext(lastRow, ":")
 		lastID = text2num(rowDetails[1])
@@ -755,7 +764,7 @@ var/global/list/playersSeen = list()
 			logTheThing(LOG_DEBUG, null, "<b>Local API Error</b> - Callback failed in <b>[type]BanApiFallback</b> with message: <b>[returnData["error"]]</b>")
 			logTheThing(LOG_DIARY, null, "<b>Local API Error</b> - Callback failed in [type]BanApiFallback with message: [returnData["error"]]", "debug")
 			if (returnData["showAdmins"])
-				message_admins("<span class='internal'><b>Failed for route [type]BanApiFallback</b>: [returnData["error"]]</span>")
+				message_admins(SPAN_INTERNAL("<b>Failed for route [type]BanApiFallback</b>: [returnData["error"]]"))
 
 			return 0
 
@@ -781,7 +790,7 @@ var/global/list/playersSeen = list()
 			logTheThing(LOG_DEBUG, null, "<b>Local API Error</b> - Callback failed in <b>[type]BanApiFallback</b> with message: <b>[returnData["error"]]</b>")
 			logTheThing(LOG_DIARY, null, "<b>Local API Error</b> - Callback failed in [type]BanApiFallback with message: [returnData["error"]]", "debug")
 			if (returnData["showAdmins"])
-				message_admins("<span class='internal'><b>Failed for route [type]BanApiFallback</b>: [returnData[</span>"error"]]")
+				message_admins(SPAN_INTERNAL("<b>Failed for route [type]BanApiFallback</b>: [returnData[")error"]]")
 
 			return 0
 	*/
@@ -842,7 +851,7 @@ var/global/list/playersSeen = list()
 	//Only operate on the log if it...exists and has stuff, naturally
 	if (fexists(banLog) && length(file2text(banLogF)) > 0)
 		var/list/log = dd_file2list(banLog)
-		var/lastIndex = (log.len > 1 ? log.len - 1 : 1)
+		var/lastIndex = (length(log) > 1 ? log.len - 1 : 1)
 		var/lastRow = log[lastIndex]
 		log = splittext(lastRow, ":")
 		latestLocalID = log[1]

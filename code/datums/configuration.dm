@@ -6,6 +6,7 @@
 	var/server_name = null				// server name (for world name / status)
 	var/server_suffix = 0				// generate numeric suffix based on server port
 	var/server_region = null
+	var/server_on_hub = TRUE
 
 	var/server_specific_configs = 0		// load extra config files (by port)
 
@@ -105,7 +106,7 @@
 	/// Are we limiting connected players to certain ckeys?
 	var/whitelistEnabled = 0
 	var/baseWhitelistEnabled = 0 //! The config value of whitelistEnabled (actual value might be modified mid-round)
-	var/roundsLeftWithoutWhitelist = 0 //! How many rounds are left without the whitelist being enabled
+	var/roundsLeftWithoutWhitelist = -1 //! How many rounds are left without the whitelist being enabled
 	var/whitelist_path = "config/whitelist.txt"
 
 	//Which server can ghosts join by clicking on an on-screen link
@@ -241,6 +242,10 @@
 
 			if ("serverregion")
 				config.server_region = value
+
+			if ("server_on_hub")
+				config.server_on_hub = text2num(value)
+				world.visibility = config.server_on_hub
 
 			if ("medalhub")
 				config.medal_hub = value
@@ -397,11 +402,11 @@
 
 	if(!already_loaded_once)
 		roundsLeftWithoutWhitelist = world.load_intra_round_value("whitelist_disabled")
-		if(roundsLeftWithoutWhitelist > 0)
+		if(roundsLeftWithoutWhitelist >= 0)
 			roundsLeftWithoutWhitelist--
 			world.save_intra_round_value("whitelist_disabled", roundsLeftWithoutWhitelist)
 
-	if(roundsLeftWithoutWhitelist > 0)
+	if(roundsLeftWithoutWhitelist >= 0)
 		config.whitelistEnabled = FALSE
 
 	already_loaded_once = TRUE
@@ -418,13 +423,13 @@
 
 	return new /datum/game_mode/extended // Let's fall back to extended! Better than erroring and having to manually restart.
 
-/datum/configuration/proc/pick_random_mode()
+/datum/configuration/proc/pick_random_mode(list/exclusions = list())
 	var/total = 0
 	var/list/accum = list()
 	var/list/avail_modes = list()
 
 	for(var/M in src.modes)
-		if (src.probabilities[M] && getSpecialModeCase(M))
+		if (!exclusions.Find(M) && src.probabilities[M] && getSpecialModeCase(M))
 			total += src.probabilities[M]
 			avail_modes += M
 			accum[M] = total
@@ -438,11 +443,10 @@
 			break
 
 	if (!mode_name)
-		boutput(world, "Failed to pick a random game mode.")
+		boutput(world, "<h1 class='alert>Failed to pick a random game mode.</h1>")
 		return null // This essentially will never happen (you'd have to not be able to choose any mode in secret), so it's okay to leave it null, I think
 
 	//boutput(world, "Returning mode [mode_name]")
-	message_admins("[mode_name] was chosen as the random game mode!")
 
 	return src.pick_mode(mode_name)
 
@@ -498,6 +502,6 @@ var/list/server_authorized = null
 	if(!server_authorized)
 		if(!fexists( "../authorized_keys.txt" )) return 1// oh no!
 		server_authorized = splittext( file2text("../authorized_keys.txt"), ";" )
-	if(server_authorized.len == 0) return 1//TODO: Remove this?
+	if(length(server_authorized) == 0) return 1//TODO: Remove this?
 	if(server_authorized.Find( ckey )) return 1
 	return 0

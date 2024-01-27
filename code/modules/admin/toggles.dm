@@ -1,47 +1,6 @@
 #define NOT_IF_TOGGLES_ARE_OFF if (!toggles_enabled) { alert("Toggling toggles has been disabled."); return; }
 
 
-//List of verbs cluttering the popup menus
-//ADD YOUR SHIT HERE IF YOU MAKE A NEW VERB THAT GOES ON RIGHT-CLICK OR YOU ARE LITERALLY HITLER (Aka marquesas jr)
-//fixed that for you -marq
-var/list/popup_verbs_to_toggle = list(\
-/client/proc/sendmobs,
-/client/proc/sendhmobs,
-/client/proc/Jump,\
-)
-
-/client/proc/toggle_popup_verbs()
-	SET_ADMIN_CAT(ADMIN_CAT_SELF)
-	set name = "Toggle Popup Verbs"
-	set desc = "Toggle verbs that appear on right-click"
-	ADMIN_ONLY
-
-	var/list/final_verblist
-
-	//The main bunch
-	for(var/I = 1,  I <= admin_verbs.len && I <= rank_to_level(src.holder.rank)+2, I++)
-		final_verblist += popup_verbs_to_toggle & admin_verbs[I] //So you only toggle verbs at your level
-
-	//The special A+ observer verbs
-	if(rank_to_level(src.holder.rank) >= LEVEL_IA)
-		final_verblist |= special_admin_observing_verbs
-		//And the special PA+ observer verbs why do we even use this? It's dumb imo
-		if(rank_to_level(src.holder.rank) >= LEVEL_PA)
-			final_verblist |= special_pa_observing_verbs
-
-	if(final_verblist.len)
-		if(!src.holder.popuptoggle)
-			for(var/V in final_verblist)
-				src.verbs -= V
-		else
-			for(var/V in final_verblist)
-				src.verbs += V
-		src.holder.popuptoggle = !src.holder.popuptoggle
-
-		boutput(usr, "<span class='notice'>Toggled popup verbs [src.holder.popuptoggle?"off":"on"]!</span>")
-
-	return
-
 // if it's in Toggles (Server) it should be in here, ya dig?
 var/list/server_toggles_tab_verbs = list(
 /client/proc/toggle_attack_messages,
@@ -75,13 +34,15 @@ var/list/server_toggles_tab_verbs = list(
 /datum/admins/proc/toggleautoending,
 /datum/admins/proc/toggleaprilfools,
 /datum/admins/proc/togglespeechpopups,
+/datum/admins/proc/toggle_global_parallax,
 /datum/admins/proc/togglemonkeyspeakhuman,
-/datum/admins/proc/toggletraitorsseeeachother,
+/datum/admins/proc/toggle_antagonists_seeing_each_other,
 /datum/admins/proc/togglelatetraitors,
 /datum/admins/proc/togglesoundwaiting,
 /datum/admins/proc/adjump,
 /datum/admins/proc/togglesimsmode,
 /datum/admins/proc/toggle_pull_slowing,
+/datum/admins/proc/togglepowerdebug,
 /client/proc/admin_toggle_nightmode,
 /client/proc/toggle_camera_network_reciprocity,
 /datum/admins/proc/toggle_radio_audio,
@@ -90,7 +51,7 @@ var/list/server_toggles_tab_verbs = list(
 /client/proc/toggle_server_toggles_tab()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
 	set name = "Toggle Server Toggles Tab"
-	set desc = "Toggle all the crap in the Toggles (Server) tab so it should go away/show up.  in thoery."
+	set desc = "Toggle all the crap in the Toggles (Server) tab so it should go away/show up.  in theory."
 	ADMIN_ONLY
 
 	var/list/final_verblist
@@ -115,7 +76,7 @@ var/list/server_toggles_tab_verbs = list(
 				src.verbs += V
 		src.holder.servertoggles_toggle = !src.holder.servertoggles_toggle
 
-		boutput(usr, "<span class='notice'>Toggled Server Toggle tab [src.holder.servertoggles_toggle?"off":"on"]!</span>")
+		boutput(usr, SPAN_NOTICE("Toggled Server Toggle tab [src.holder.servertoggles_toggle?"off":"on"]!"))
 
 	return
 
@@ -171,7 +132,7 @@ var/global/IP_alerts = 1
 	ADMIN_ONLY
 
 	src.only_local_looc = !src.only_local_looc
-	boutput(usr, "<span class='notice'>Toggled seeing all LOOC messages [src.only_local_looc ?"off":"on"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled seeing all LOOC messages [src.only_local_looc ?"off":"on"]!"))
 
 /client/proc/toggle_hearing_all()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -181,9 +142,9 @@ var/global/IP_alerts = 1
 
 	if(src.mob)
 		src.mob.mob_flags ^= MOB_HEARS_ALL
-		boutput(usr, "<span class='notice'>Toggled seeing all messages [src.mob.mob_flags & MOB_HEARS_ALL ? "on" : "off"]!</span>")
+		boutput(usr, SPAN_NOTICE("Toggled seeing all messages [src.mob.mob_flags & MOB_HEARS_ALL ? "on" : "off"]!"))
 	else
-		boutput(usr, "<span class='notice'>You don't have a mob, somehow, what!</span>")
+		boutput(usr, SPAN_NOTICE("You don't have a mob, somehow, what!"))
 
 /client/proc/toggle_attack_messages()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -192,7 +153,7 @@ var/global/IP_alerts = 1
 	ADMIN_ONLY
 
 	src.holder.attacktoggle = !src.holder.attacktoggle
-	boutput(usr, "<span class='notice'>Toggled attack log messages [src.holder.attacktoggle ?"on":"off"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled attack log messages [src.holder.attacktoggle ?"on":"off"]!"))
 
 client/proc/toggle_ghost_respawns()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -201,7 +162,7 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 
 	src.holder.ghost_respawns = !src.holder.ghost_respawns
-	boutput(usr, "<span class='notice'>Toggled ghost respawn offers [src.holder.ghost_respawns ?"on":"off"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled ghost respawn offers [src.holder.ghost_respawns ?"on":"off"]!"))
 
 /client/proc/toggle_adminwho_alerts()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -210,7 +171,7 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 
 	src.holder.adminwho_alerts = !src.holder.adminwho_alerts
-	boutput(usr, "<span class='notice'>Toggled who/adminwho alerts [src.holder.adminwho_alerts ?"on":"off"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled who/adminwho alerts [src.holder.adminwho_alerts ?"on":"off"]!"))
 
 /client/proc/toggle_rp_word_filtering()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -219,10 +180,10 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 	src.holder.rp_word_filtering = !src.holder.rp_word_filtering
 	if(src.holder.rp_word_filtering)
-		src.RegisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_SUSSY_PHRASE, .proc/message_one_admin)
+		src.holder.RegisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_SUSSY_PHRASE, TYPE_PROC_REF(/datum/admins, admin_message_to_me))
 	else
-		src.UnregisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_SUSSY_PHRASE)
-	boutput(usr, "<span class='notice'>Toggled RP word filter notifications [src.holder.rp_word_filtering ?"on":"off"]!</span>")
+		src.holder.UnregisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_SUSSY_PHRASE)
+	boutput(usr, SPAN_NOTICE("Toggled RP word filter notifications [src.holder.rp_word_filtering ?"on":"off"]!"))
 
 /client/proc/toggle_uncool_word_filtering()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -231,10 +192,10 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 	src.holder.uncool_word_filtering = !src.holder.uncool_word_filtering
 	if(src.holder.uncool_word_filtering)
-		src.RegisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_UNCOOL_PHRASE, .proc/message_one_admin)
+		src.holder.RegisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_UNCOOL_PHRASE, TYPE_PROC_REF(/datum/admins, admin_message_to_me))
 	else
-		src.UnregisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_UNCOOL_PHRASE)
-	boutput(usr, "<span class='notice'>Toggled uncool word filter notifications [src.holder.uncool_word_filtering ?"on":"off"]!</span>")
+		src.holder.UnregisterSignal(GLOBAL_SIGNAL, COMSIG_GLOBAL_UNCOOL_PHRASE)
+	boutput(usr, SPAN_NOTICE("Toggled uncool word filter notifications [src.holder.uncool_word_filtering ?"on":"off"]!"))
 
 /client/proc/toggle_hear_prayers()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -243,7 +204,7 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 
 	src.holder.hear_prayers = !src.holder.hear_prayers
-	boutput(usr, "<span class='notice'>Toggled prayers [src.holder.hear_prayers ?"on":"off"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled prayers [src.holder.hear_prayers ?"on":"off"]!"))
 
 /client/proc/toggle_atags()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -255,7 +216,7 @@ client/proc/toggle_ghost_respawns()
 
 /client/proc/_toggle_atags()
 	src.holder.see_atags = !src.holder.see_atags
-	boutput(usr, "<span class='notice'>Toggled ATags [src.holder.see_atags ?"on":"off"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled ATags [src.holder.see_atags ?"on":"off"]!"))
 
 /client/proc/toggle_buildmode_view()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -264,7 +225,7 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 
 	src.holder.buildmode_view = !src.holder.buildmode_view
-	boutput(usr, "<span class='notice'>Toggled buildmode changing view [src.holder.buildmode_view ?"off":"on"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled buildmode changing view [src.holder.buildmode_view ?"off":"on"]!"))
 
 /client/proc/toggle_spawn_in_loc()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -273,7 +234,7 @@ client/proc/toggle_ghost_respawns()
 	ADMIN_ONLY
 
 	src.holder.spawn_in_loc = !src.holder.spawn_in_loc
-	boutput(usr, "<span class='notice'>Toggled spawn verb spawning in your loc [src.holder.spawn_in_loc ?"off":"on"]!</span>")
+	boutput(usr, SPAN_NOTICE("Toggled spawn verb spawning in your loc [src.holder.spawn_in_loc ?"off":"on"]!"))
 
 /client/proc/cmd_admin_playermode()
 	set name = "Toggle Player mode"
@@ -287,9 +248,7 @@ client/proc/toggle_ghost_respawns()
 		player_mode_asay = 0
 		player_mode_ahelp = 0
 		player_mode_mhelp = 0
-		if (src.holder.popuptoggle)
-			src.toggle_popup_verbs()
-		boutput(usr, "<span class='notice'>Player mode now OFF.</span>")
+		boutput(usr, SPAN_NOTICE("Player mode now OFF."))
 	else
 		var/choice = input(src, "ASAY = adminsay, AHELP = adminhelp, MHELP = mentorhelp", "Choose which messages to receive") as null|anything in list("NONE (Remove admin menus)","NONE (Keep admin menus)", "ASAY, AHELP & MHELP", "ASAY & AHELP", "ASAY & MHELP", "AHELP & MHELP", "ASAY ONLY", "AHELP ONLY", "MHELP ONLY")
 		switch (choice)
@@ -343,11 +302,7 @@ client/proc/toggle_ghost_respawns()
 				// Cancel = don't turn on player mode
 				return
 
-		boutput(usr, "<span class='notice'>Player mode now on. [player_mode_asay ? "&mdash; ASAY ON" : ""] [player_mode_ahelp ? "&mdash; AHELPs ON" : ""] [player_mode_mhelp ? "&mdash; MHELPs ON" : ""]</span>")
-
-		// turn of popup verbs too
-		if (src.holder && !src.holder.popuptoggle)
-			src.toggle_popup_verbs()
+		boutput(usr, SPAN_NOTICE("Player mode now on. [player_mode_asay ? "&mdash; ASAY ON" : ""] [player_mode_ahelp ? "&mdash; AHELPs ON" : ""] [player_mode_mhelp ? "&mdash; MHELPs ON" : ""]"))
 
 	logTheThing(LOG_ADMIN, usr, "has set player mode to [(player_mode ? "On" : "Off")]")
 	logTheThing(LOG_DIARY, usr, "has set player mode to [(player_mode ? "On" : "Off")]", "admin")
@@ -362,7 +317,7 @@ client/proc/toggle_ghost_respawns()
 	if (!isliving(M))
 		return
 	M.nodamage = !(M.nodamage)
-	boutput(usr, "<span class='notice'><b>[M]'s godmode is now [usr.nodamage ? "ON" : "OFF"]</b></span>")
+	boutput(usr, SPAN_NOTICE("<b>[M]'s godmode is now [usr.nodamage ? "ON" : "OFF"]</b>"))
 
 	logTheThing(LOG_ADMIN, usr, "has toggled [constructTarget(M,"admin")]'s nodamage to [(M.nodamage ? "On" : "Off")]")
 	logTheThing(LOG_DIARY, usr, "has toggled [constructTarget(M,"diary")]'s nodamage to [(M.nodamage ? "On" : "Off")]", "admin")
@@ -381,11 +336,26 @@ client/proc/toggle_ghost_respawns()
 	for (var/status in statuses)
 		if (statuses[status].effect_quality == STATUS_QUALITY_NEGATIVE)
 			usr.delStatus(status)
-	boutput(usr, "<span class='notice'><b>Your godmode is now [usr.nodamage ? "ON" : "OFF"]</b></span>")
+	boutput(usr, SPAN_NOTICE("<b>Your godmode is now [usr.nodamage ? "ON" : "OFF"]</b>"))
 
 	logTheThing(LOG_ADMIN, usr, "has toggled their nodamage to [(usr.nodamage ? "On" : "Off")]")
 	logTheThing(LOG_DIARY, usr, "has toggled their nodamage to [(usr.nodamage ? "On" : "Off")]", "admin")
 	message_admins("[key_name(usr)] has toggled their nodamage to [(usr.nodamage ? "On" : "Off")]")
+
+/client/proc/cmd_admin_toggle_ghost_interaction()
+	SET_ADMIN_CAT(ADMIN_CAT_SELF)
+	set name = "Toggle Ghost Interaction"
+	set popup_menu = 0
+	ADMIN_ONLY
+
+	src.holder.ghost_interaction = !src.holder.ghost_interaction
+	boutput(usr, SPAN_NOTICE("<b>Your ghost interaction mode is now [src.holder.ghost_interaction ? "ON" : "OFF"]</b>"))
+	if(isobserver(mob))
+		setalive(mob)
+
+	logTheThing(LOG_ADMIN, usr, "has toggled their ghost interaction to [(src.holder.ghost_interaction ? "On" : "Off")]")
+	logTheThing(LOG_DIARY, usr, "has toggled their ghost interaction to [(src.holder.ghost_interaction ? "On" : "Off")]", "admin")
+	message_admins("[key_name(usr)] has toggled their ghost interaction to [(src.holder.ghost_interaction ? "On" : "Off")]")
 
 /client/proc/iddqd()
 	SET_ADMIN_CAT(ADMIN_CAT_NONE)
@@ -393,7 +363,7 @@ client/proc/toggle_ghost_respawns()
 	set popup_menu = 0
 	ADMIN_ONLY
 	usr.client.cmd_admin_godmode_self()
-	boutput(usr, "<span class='notice'><b>Degreelessness mode [usr.nodamage ? "On" : "Off"]</b></span>")
+	boutput(usr, SPAN_NOTICE("<b>Degreelessness mode [usr.nodamage ? "On" : "Off"]</b>"))
 
 /client/var/flying = 0
 /client/proc/noclip()
@@ -427,7 +397,7 @@ client/proc/toggle_ghost_respawns()
 	else
 		OTHER_STOP_TRACKING_CAT(src.mob, TR_CAT_OMNIPRESENT_MOBS)
 		omnipresent = FALSE
-	boutput(usr, "<span class='notice'><b>Your omnipresence is now [omnipresent ? "ON" : "OFF"]</b></span>")
+	boutput(usr, SPAN_NOTICE("<b>Your omnipresence is now [omnipresent ? "ON" : "OFF"]</b>"))
 
 	logTheThing(LOG_ADMIN, usr, "has toggled their omnipresence to [(omnipresent ? "On" : "Off")]")
 	logTheThing(LOG_DIARY, usr, "has toggled their omnipresence to [(omnipresent ? "On" : "Off")]", "admin")
@@ -437,12 +407,12 @@ client/proc/toggle_ghost_respawns()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
 	set name = "Toggle Atom Verbs"
 	ADMIN_ONLY
-	if(!src.holder.animtoggle)
-		src.holder.animtoggle = 1
-		boutput(src, "Atom interaction options toggled on.")
-	else
-		src.holder.animtoggle = 0
+	if(!src.holder.disable_atom_verbs)
+		src.holder.disable_atom_verbs = 1
 		boutput(src, "Atom interaction options toggled off.")
+	else
+		src.holder.disable_atom_verbs = 0
+		boutput(src, "Atom interaction options toggled on.")
 
 /client/proc/toggle_view_range()
 	SET_ADMIN_CAT(ADMIN_CAT_SELF)
@@ -591,7 +561,7 @@ client/proc/toggle_ghost_respawns()
 		boutput(world, "<B>You may now enter the game.</B>")
 	logTheThing(LOG_ADMIN, usr, "toggled new player game entering.")
 	logTheThing(LOG_DIARY, usr, "toggled new player game entering.", "admin")
-	message_admins("<span class='internal'>[key_name(usr)] toggled new player game entering.</span>")
+	message_admins(SPAN_INTERNAL("[key_name(usr)] toggled new player game entering."))
 	world.update_status()
 
 /datum/admins/proc/toggleAI()
@@ -628,7 +598,7 @@ client/proc/toggle_ghost_respawns()
 		boutput(world, "<B>You may now respawn.</B>")
 	else
 		boutput(world, "<B>You may no longer respawn :(</B>")
-	message_admins("<span class='internal'>[key_name(usr)] toggled respawn to [abandon_allowed ? "On" : "Off"].</span>")
+	message_admins(SPAN_INTERNAL("[key_name(usr)] toggled respawn to [abandon_allowed ? "On" : "Off"]."))
 	logTheThing(LOG_ADMIN, usr, "toggled respawn to [abandon_allowed ? "On" : "Off"].")
 	logTheThing(LOG_DIARY, usr, "toggled respawn to [abandon_allowed ? "On" : "Off"].", "admin")
 	world.update_status()
@@ -663,7 +633,7 @@ client/proc/toggle_ghost_respawns()
 	set name="Toggle Sound Playing"
 	NOT_IF_TOGGLES_ARE_OFF
 	config.allow_admin_sounds = !(config.allow_admin_sounds)
-	message_admins("<span class='internal'>Toggled admin sound playing to [config.allow_admin_sounds].</span>")
+	message_admins(SPAN_INTERNAL("Toggled admin sound playing to [config.allow_admin_sounds]."))
 
 /datum/admins/proc/adspawn()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
@@ -671,7 +641,7 @@ client/proc/toggle_ghost_respawns()
 	set name="Toggle Spawn"
 	NOT_IF_TOGGLES_ARE_OFF
 	config.allow_admin_spawning = !(config.allow_admin_spawning)
-	message_admins("<span class='internal'>Toggled admin item spawning to [config.allow_admin_spawning].</span>")
+	message_admins(SPAN_INTERNAL("Toggled admin item spawning to [config.allow_admin_spawning]."))
 
 /datum/admins/proc/adrev()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
@@ -679,7 +649,7 @@ client/proc/toggle_ghost_respawns()
 	set name="Toggle Revive"
 	NOT_IF_TOGGLES_ARE_OFF
 	config.allow_admin_rev = !(config.allow_admin_rev)
-	message_admins("<span class='internal'>Toggled reviving to [config.allow_admin_rev].</span>")
+	message_admins(SPAN_INTERNAL("Toggled reviving to [config.allow_admin_rev]."))
 
 /datum/admins/proc/toggledeadchat()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
@@ -784,10 +754,10 @@ client/proc/toggle_ghost_respawns()
 	NOT_IF_TOGGLES_ARE_OFF
 	if(deadchatoff == 0)
 		deadchatoff = 1
-		boutput(usr, "<span class='notice'>No longer viewing deadchat.</span>")
+		boutput(usr, SPAN_NOTICE("No longer viewing deadchat."))
 	else
 		deadchatoff = 0
-		boutput(usr, "<span class='notice'>Now viewing deadchat.</span>")
+		boutput(usr, SPAN_NOTICE("Now viewing deadchat."))
 
 /datum/admins/proc/toggleaprilfools()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
@@ -827,6 +797,20 @@ client/proc/toggle_ghost_respawns()
 	logTheThing(LOG_DIARY, usr, "toggled speech popups [speechpopups ? "on" : "off"].", "admin")
 	message_admins("[key_name(usr)] toggled speech popups [speechpopups ? "on" : "off"]")
 
+/datum/admins/proc/toggle_global_parallax()
+	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
+	set name = "Toggle Global Parallax"
+	set desc = "Toggles parallax on or off globally. Toggling on respects client preferences in regard to parallax."
+
+	parallax_enabled = !parallax_enabled
+
+	for (var/client/client in clients)
+		client.toggle_parallax()
+
+	logTheThing(LOG_ADMIN, src, "toggled parallax [parallax_enabled ? "on" : "off"] globally.")
+	logTheThing(LOG_DIARY, src, "toggled parallax [parallax_enabled ? "on" : "off"] globally.", "admin")
+	message_admins("[key_name(src)] toggled parallax [parallax_enabled ? "on" : "off"] globally.")
+
 /datum/admins/proc/togglemonkeyspeakhuman()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
 	set desc = "Toggle monkeys being able to speak human."
@@ -841,19 +825,28 @@ client/proc/toggle_ghost_respawns()
 	logTheThing(LOG_DIARY, usr, "toggled Monkey/Human communication [monkeysspeakhuman ? "on" : "off"].", "admin")
 	message_admins("[key_name(usr)] toggled Monkey/Human communication [monkeysspeakhuman ? "on" : "off"]")
 
-/datum/admins/proc/toggletraitorsseeeachother()
+/datum/admins/proc/toggle_antagonists_seeing_each_other()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
-	set desc = "Toggle traitors being able to see each other."
-	set name = "Toggle Traitors Seeing Each Other"
+	set desc = "Toggle all antagonists being able to see each other."
+	set name = "Toggle Antagonists Seeing Each Other"
 	NOT_IF_TOGGLES_ARE_OFF
-	traitorsseeeachother = !traitorsseeeachother
-	if (traitorsseeeachother)
-		boutput(world, "<B>Traitors can now see each other.</B>")
+	antagonists_see_each_other = !antagonists_see_each_other
+
+	var/datum/client_image_group/antagonist_image_group = get_image_group(CLIENT_IMAGE_GROUP_ALL_ANTAGONISTS)
+	for (var/datum/antagonist/antagonist_role as anything in get_all_antagonists())
+		if (antagonists_see_each_other)
+			antagonist_image_group.add_mind(antagonist_role.owner)
+		else
+			antagonist_image_group.remove_mind(antagonist_role.owner)
+
+	if (antagonists_see_each_other)
+		boutput(world, "<B>Antagonists can now see each other.</B>")
 	else
-		boutput(world, "<B>Traitors can no longer see each other.</B>")
-	logTheThing(LOG_ADMIN, usr, "toggled traitors seeing each other [traitorsseeeachother ? "on" : "off"].")
-	logTheThing(LOG_DIARY, usr, "toggled traitors seeing each other [traitorsseeeachother ? "on" : "off"].", "admin")
-	message_admins("[key_name(usr)] toggled traitors seeing each other [traitorsseeeachother ? "on" : "off"]")
+		boutput(world, "<B>Antagonists can no longer see each other.</B>")
+
+	logTheThing(LOG_ADMIN, usr, "toggled antagonists seeing each other [antagonists_see_each_other ? "on" : "off"].")
+	logTheThing(LOG_DIARY, usr, "toggled antagonists seeing each other [antagonists_see_each_other ? "on" : "off"].", "admin")
+	message_admins("[key_name(usr)] toggled antagonists seeing each other [antagonists_see_each_other ? "on" : "off"]")
 
 /datum/admins/proc/toggleautoending()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
@@ -891,7 +884,7 @@ client/proc/toggle_ghost_respawns()
 	set name="Toggle Jump"
 	NOT_IF_TOGGLES_ARE_OFF
 	config.allow_admin_jump = !(config.allow_admin_jump)
-	message_admins("<span class='internal'>Toggled admin jumping to [config.allow_admin_jump].</span>")
+	message_admins(SPAN_INTERNAL("Toggled admin jumping to [config.allow_admin_jump]."))
 
 /datum/admins/proc/togglesimsmode()
 	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
@@ -899,7 +892,7 @@ client/proc/toggle_ghost_respawns()
 	set name = "Toggle Sims Mode"
 	NOT_IF_TOGGLES_ARE_OFF
 	global_sims_mode = !global_sims_mode
-	message_admins("<span class='internal'>[key_name(usr)] toggled sims mode. [global_sims_mode ? "Oh, the humanity!" : "Phew, it's over."]</span>")
+	message_admins(SPAN_INTERNAL("[key_name(usr)] toggled sims mode. [global_sims_mode ? "Oh, the humanity!" : "Phew, it's over."]"))
 	for (var/mob/M in mobs)
 		LAGCHECK(LAG_LOW)
 		boutput(M, "<b>Motives have been globally [global_sims_mode ? "enabled" : "disabled"].</b>")
@@ -934,9 +927,9 @@ client/proc/toggle_ghost_respawns()
 	var/oview_phrase
 	switch (radio_audio_enabled)
 		if (FALSE)
-			oview_phrase = "<span class='alert'>A glowing hand appears out of nowhere and rips \"out of order\" sticker on OBJECT_NAME!</span>"
+			oview_phrase = SPAN_ALERT("A glowing hand appears out of nowhere and rips \"out of order\" sticker on OBJECT_NAME!")
 		if (TRUE)
-			oview_phrase = "<span class='alert'>A glowing hand appears out of nowhere and slaps a \"out of order\" sticker on OBJECT_NAME!</span>"
+			oview_phrase = SPAN_ALERT("A glowing hand appears out of nowhere and slaps a \"out of order\" sticker on OBJECT_NAME!")
 
 	for(var/obj/submachine/tape_deck/O in by_type[/obj/submachine/tape_deck])
 		for(var/mob/living/M in oview(5, O))
@@ -950,7 +943,7 @@ client/proc/toggle_ghost_respawns()
 
 	radio_audio_enabled = !radio_audio_enabled
 
-	message_admins("<span class='internal'>[key_name(usr)] [radio_audio_enabled ? "" : "dis"]allowed for radio music/tapes to play.</span>")
+	message_admins(SPAN_INTERNAL("[key_name(usr)] [radio_audio_enabled ? "" : "dis"]allowed for radio music/tapes to play."))
 	logTheThing(LOG_DIARY, usr, "[radio_audio_enabled ? "" : "dis"]allowed for radio music/tapes to play.")
 	logTheThing(LOG_ADMIN, usr, "[radio_audio_enabled ? "" : "dis"]allowed for radio music/tapes to play.")
 
@@ -972,6 +965,19 @@ client/proc/toggle_ghost_respawns()
 			C.set_widescreen(1)
 		message_admins( "[key_name(src)] toggled widescreen on." )
 */
+
+
+
+/datum/admins/proc/togglepowerdebug()
+	SET_ADMIN_CAT(ADMIN_CAT_SERVER_TOGGLES)
+	set desc="Toggle power debugging popups"
+	set name="Toggle Power Debug"
+	NOT_IF_TOGGLES_ARE_OFF
+	zamus_dumb_power_popups = !( zamus_dumb_power_popups )
+	logTheThing(LOG_ADMIN, usr, "toggled power debug popups.")
+	logTheThing(LOG_DIARY, usr, "toggled power debug popups.", "admin")
+	message_admins("[key_name(usr)] toggled power debug popups.")
+
 
 /client/proc/toggle_next_click()
 	set name = "Toggle next_click"

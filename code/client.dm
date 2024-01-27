@@ -1,5 +1,3 @@
-var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. if ip = true, thats a vpn ip. if its false, its a normal ip.
-
 /client
 #ifdef PRELOAD_RSC_URL
 	preload_rsc = PRELOAD_RSC_URL
@@ -49,9 +47,10 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 
 	var/widescreen = 0
 	var/vert_split = 1
+	var/darkmode = TRUE
 
 	var/tg_controls = 0
-	var/tg_layout = 0
+	var/tg_layout = null
 
 	var/use_chui = 1
 	var/use_chui_custom_frames = 1
@@ -132,8 +131,13 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	return
 
 /client/Del()
-	// technically not disposing but it really should be here for feature parity
-	SEND_SIGNAL(src, COMSIG_PARENT_PRE_DISPOSING)
+	clients -= src
+
+	try
+		// technically not disposing but it really should be here for feature parity
+		SEND_SIGNAL(src, COMSIG_PARENT_PRE_DISPOSING)
+	catch(var/exception/E)
+		logTheThing(LOG_DEBUG, src, "caught [E] in /client/Del() signal stuff.")
 
 	src.mob?.move_dir = 0
 
@@ -145,12 +149,11 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	*/
 	logTheThing(LOG_ADMIN, src, " has disconnected.")
 
-	src.images.Cut() //Probably not needed but eh.
+	src.images?.Cut() //Probably not needed but eh.
 
 	if (src.mob)
 		src.mob.remove_dialogs()
 
-	clients -= src
 	if(src.holder)
 		onlineAdmins.Remove(src)
 		src.holder.dispose()
@@ -194,7 +197,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	login_success = 0
 
 	if(findtext(src.key, "Telnet @"))
-		boutput(src, "Sorry, this game does not support Telnet.")
+		boutput(src, "<h1 class='alert'>Sorry, this game does not support Telnet.</span>")
 		preferences = new
 		sleep(5 SECONDS)
 		del(src)
@@ -227,16 +230,6 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	if (!isnewplayer(src.mob))
 		src.loadResources()
 
-/*
-	SPAWN(rand(4,18))
-		if(proxy_check(src.address))
-			logTheThing(LOG_DIARY, null, "Failed Login: [constructTarget(src,"diary")] - Using a Tor Proxy Exit Node", "access")
-			if (announce_banlogin) message_admins("<span class='internal'>Failed Login: [src] - Using a Tor Proxy Exit Node (IP: [src.address], ID: [src.computer_id])</span>")
-			boutput(src, "You may not connect through TOR.")
-			SPAWN(0) del(src)
-			return
-*/
-
 	src.volumes = default_channel_volumes.Copy()
 
 	Z_LOG_DEBUG("Client/New", "[src.ckey] - Running parent new")
@@ -244,10 +237,10 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	..()
 
 	if (join_motd)
-		boutput(src, "<div class=\"motd\">[join_motd]</div>")
+		boutput(src, "<div class='motd'>[join_motd]</div>")
 
 	if (IsGuestKey(src.key))
-		if(!(!src.address || src.address == world.host)) // If you're a host or a developer locally, ignore this check.
+		if(!(!src.address || src.address == world.host || src.address == "127.0.0.1")) // If you're a host or a developer locally, ignore this check.
 			var/gueststring = {"
 							<!doctype html>
 							<html>
@@ -311,7 +304,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	if (isbanned)
 		Z_LOG_DEBUG("Client/New", "[src.ckey] - Banned!!")
 		logTheThing(LOG_DIARY, null, "Failed Login: [constructTarget(src,"diary")] - Banned", "access")
-		if (announce_banlogin) message_admins("<span class='internal'>Failed Login: <a href='?src=%admin_ref%;action=notes;target=[src.ckey]'>[src]</a> - Banned (IP: [src.address], ID: [src.computer_id])</span>")
+		if (announce_banlogin) message_admins(SPAN_INTERNAL("Failed Login: <a href='?src=%admin_ref%;action=notes;target=[src.ckey]'>[src]</a> - Banned (IP: [src.address], ID: [src.computer_id])"))
 		var/banstring = {"
 							<!doctype html>
 							<html>
@@ -326,8 +319,9 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 								</head>
 								<body>
 									<h1>You have been banned.</h1>
-									<span class='banreason'>Reason: [isbanned].</span><br>
-									If you believe you were unjustly banned, head to <a target="_blank" href=\"https://forum.ss13.co\">the forums</a> and post an appeal.
+									<span class='banreason'>"Reason: [isbanned].")]</span><br>
+									If you believe you were unjustly banned, head to <a target="_blank" href=\"https://forum.ss13.co\">the forums</a> and post an appeal.<br>
+									<b>If you believe this ban was not meant for you then please appeal regardless of what the ban message or length says!</b>
 								</body>
 							</html>
 						"}
@@ -339,59 +333,10 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 
 	Z_LOG_DEBUG("Client/New", "[src.ckey] - Ban check complete")
 
-//vpn check (for ban evasion purposes)
-#ifdef DO_VPN_CHECKS
-	if (vpn_blacklist_enabled)
-		var/is_vpn_address = global.vpn_ip_checks["[src.address]"]
-
-		// We have already checked this user this round and they are indeed on a VPN, kick em
-		if (is_vpn_address)
-			src.vpn_bonk(repeat_attempt = TRUE)
-			return
-
-		// Client has not been checked for VPN status this round, go do so, but only for relatively new accounts
-		// NOTE: adjust magic numbers here if we approach vpn checker api rate limits
-		if (isnull(is_vpn_address) && (src.player.rounds_participated < 5 || src.player.rounds_seen < 20))
-			var/list/data
-			try
-				data = apiHandler.queryAPI("vpncheck", list("ip" = src.address, "ckey" = src.ckey), 1, 1, 1)
-				// Goonhub API error encountered
-				if (data["error"])
-					logTheThing(LOG_ADMIN, src, "unable to check VPN status of [src.address] because: [data["error"]]")
-					logTheThing(LOG_DIARY, src, "unable to check VPN status of [src.address] because: [data["error"]]", "debug")
-
-				// Successful Goonhub API query
-				else
-					var/result = postscan(data)
-					if (result == 2 || data["whitelisted"])
-						// User is explicitly whitelisted from VPN checks, ignore
-						global.vpn_ip_checks["[src.address]"] = FALSE
-
-					else
-						data = json_decode(html_decode(data["response"]))
-
-						// VPN checker service returns error responses in a "message" property
-						if (data["success"] == FALSE)
-							// Yes, we're forcing a cache for a no-VPN response here on purpose
-							// Reasoning: The goonhub API has cached the VPN checker error response for the foreseeable future and further queries won't change that
-							//			  so we want to avoid spamming the goonhub API this round for literally no gain
-							global.vpn_ip_checks["[src.address]"] = FALSE
-							logTheThing(LOG_ADMIN, src, "unable to check VPN status of [src.address] because: [data["message"]]")
-							logTheThing(LOG_DIARY, src, "unable to check VPN status of [src.address] because: [data["message"]]", "debug")
-
-						// Successful VPN check
-						// IP is a known VPN, cache locally and kick
-						else if (result || (((data["vpn"] == TRUE) || (data["tor"] == TRUE)) && (data["fraud_score"] > 75)))
-							vpn_bonk(data["host"], data["asn"], data["organization"], data["fraud_score"])
-							return
-						// IP is not a known VPN
-						else
-							global.vpn_ip_checks["[src.address]"] = FALSE
-
-			catch(var/exception/e)
-				logTheThing(LOG_ADMIN, src, "unable to check VPN status of [src.address] because: [e.name]")
-				logTheThing(LOG_DIARY, src, "unable to check VPN status of [src.address] because: [e.name]", "debug")
-#endif
+	if (!src.chatOutput.loaded)
+		//Load custom chat
+		SPAWN(-1)
+			src.chatOutput.start()
 
 	//admins and mentors can enter a server through player caps.
 	if (init_admin())
@@ -415,12 +360,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 	clients += src
 
 	SPAWN(0) // to not lock up spawning process
-		if (IsGuestKey(src.key))
-			src.has_contestwinner_medal = 0
-		else if (!config || !config.medal_hub || !config.medal_password)
-			src.has_contestwinner_medal = 0
-		else
-			src.has_contestwinner_medal = world.GetMedal("Too Cool", src.key, config.medal_hub, config.medal_password)
+		src.has_contestwinner_medal = src.player.has_medal("Too Cool")
 
 	src.initSizeHelpers()
 
@@ -451,6 +391,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 #endif
 		// new player logic, moving some of the preferences handling procs from new_player.Login
 		Z_LOG_DEBUG("Client/New", "[src.ckey] - 3 sec spawn stuff")
+
 		if (!preferences)
 			preferences = new
 		if (istype(src.mob, /mob/new_player))
@@ -461,8 +402,8 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 #ifndef IM_TESTING_SHIT_STOP_BARFING_CHANGELOGS_AT_ME
 				//preferences.randomizeLook()
 				preferences.ShowChoices(src.mob)
-				src.mob.Browse(grabResource("html/tgControls.html"),"window=tgcontrolsinfo;size=600x400;title=TG Controls Help")
-				boutput(src, "<span class='alert'>Welcome! You don't have a character profile saved yet, so please create one. If you're new, check out the <a target='_blank' href='https://wiki.ss13.co/Getting_Started#Fundamentals'>quick-start guide</a> for how to play!</span>")
+				tgui_alert(src, content_window = "tgControls", do_wait = FALSE)
+				boutput(src, SPAN_ALERT("Welcome! You don't have a character profile saved yet, so please create one. If you're new, check out the <a target='_blank' href='https://wiki.ss13.co/Getting_Started#Fundamentals'>quick-start guide</a> for how to play!"))
 				//hey maybe put some 'new player mini-instructional' prompt here
 				//ok :)
 				is_newbie = 1
@@ -482,26 +423,33 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 			if (src.holder && rank_to_level(src.holder.rank) >= LEVEL_MOD) // No admin changelog for goat farts (Convair880).
 				admin_changes()
 #endif
-
-			if (src.byond_version < 514 || src.byond_build < 1566)
-				if (tgui_alert(src, "Please update BYOND to the latest version! Would you like to be taken to the download page? Make sure to download the stable release.", "ALERT", list("Yes", "No")) == "Yes")
-					src << link("http://www.byond.com/download/")
-			if (src.byond_version >= 515)
-				if (alert(src, "Please DOWNGRADE BYOND to version 514.1589! Many things will break otherwise. Would you like to be taken to the correct download page?", "ALERT", "Yes", "No") == "Yes")
-					src << link("http://www.byond.com/download/build/514/514.1589_byond_setup.zip")
-/*
- 				else
-					alert(src, "You won't be able to play without updating, sorry!")
-					del(src)
-					return
-*/
-
 		else
 			if (noir)
 				animate_fade_grayscale(src, 1)
 			preferences.savefile_load(src)
-			load_antag_tokens()
+			src.antag_tokens = src.player?.get_antag_tokens()
 			load_persistent_bank()
+
+#ifdef LIVE_SERVER
+		// check client version validity
+		if (src.byond_version < 514 || src.byond_build < 1584)
+			logTheThing(LOG_ADMIN, src, "connected with outdated client version [byond_version].[byond_build]. Request to update client sent to user.")
+			if (tgui_alert(src, "Please update BYOND to the latest version! Would you like to be taken to the download page now? Make sure to download the stable release.", "ALERT", list("Yes", "No"), 30 SECONDS) == "Yes")
+				src << link("http://www.byond.com/download/")
+	#if (BUILD_TIME_UNIX < 1682899200) //cut off may 1st, 2023
+			else
+				tgui_alert(src, "Version enforcement will be enabled May 1st, 2023. To avoid interruption to gameplay please be sure to update as soon as you can.", "ALERT", timeout = 30 SECONDS)
+	#else
+			// kick out of date clients
+			tgui_alert(src, "Version enforcement is enabled, you will now be forcibly booted. Please be sure to update your client before attempting to rejoin", "ALERT", timeout = 30 SECONDS)
+			del(src)
+			tgui_process.close_user_uis(src.mob)
+			return
+	#endif
+		if (src.byond_version >= 515)
+			if (alert(src, "Please DOWNGRADE BYOND to version 514.1589! Many things will break otherwise. Would you like to be taken to the download page?", "ALERT", "Yes", "No") == "Yes")
+				src << link("http://www.byond.com/download/")
+#endif
 
 		Z_LOG_DEBUG("Client/New", "[src.ckey] - setjoindate")
 		setJoinDate()
@@ -510,11 +458,6 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 			tgui_alert(src, "Hardware rendering is disabled. This may cause errors displaying lighting, manifesting as BIG WHITE SQUARES.\nPlease enable hardware rendering from the byond preferences menu.", "Potential Rendering Issue")
 
 		ircbot.event("login", src.key)
-#if defined(RP_MODE) && !defined(IM_TESTING_SHIT_STOP_BARFING_CHANGELOGS_AT_ME)
-		src.verbs += /client/proc/cmd_rp_rules
-		if (istype(src.mob, /mob/new_player))
-			src.cmd_rp_rules()
-#endif
 		//Cloud data
 #ifdef LIVE_SERVER
 		if (cdn)
@@ -525,7 +468,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		if (src.player.cloud_fetch()) // might needlessly reload, but whatever.
 #endif
 			if(cloud_available())
-				src.load_antag_tokens()
+				src.antag_tokens = src.player?.get_antag_tokens()
 				src.load_persistent_bank()
 				var/decoded = cloud_get("audio_volume")
 				if(decoded)
@@ -551,6 +494,12 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		if(istype(src.mob, /mob/new_player))
 			var/mob/new_player/M = src.mob
 			M.new_player_panel() // update if tokens available
+
+#if defined(RP_MODE) && !defined(IM_TESTING_SHIT_STOP_BARFING_CHANGELOGS_AT_ME)
+		src.verbs += /client/proc/cmd_rp_rules
+		if (istype(src.mob, /mob/new_player) && src.player.get_rounds_participated_rp() <= 10)
+			src.cmd_rp_rules()
+#endif
 
 	if(do_compid_analysis)
 		do_computerid_test(src) //Will ban yonder fucker in case they are prix
@@ -580,11 +529,6 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		plane_parent.color = list(255, 0, 0, 0, 255, 0, 0, 0, 255, -spooky_light_mode, -spooky_light_mode - 1, -spooky_light_mode - 2)
 		src.set_color(normalize_color_to_matrix("#AAAAAA"))
 
-	if (!src.chatOutput.loaded)
-		//Load custom chat
-		SPAWN(-1)
-			src.chatOutput.start()
-
 	logTheThing(LOG_DIARY, null, "Login: [constructTarget(src.mob,"diary")] from [src.address]", "access")
 
 	if (config.log_access)
@@ -594,7 +538,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		// when an admin logs in check all clients again per Mordent's request
 		for(var/client/C)
 			C.ip_cid_conflict_check(log_it=FALSE, alert_them=FALSE, only_if_first=TRUE, message_who=src)
-
+	winset(src, null, "rpanewindow.left=infowindow")
 	Z_LOG_DEBUG("Client/New", "[src.ckey] - new() finished.")
 
 	login_success = 1
@@ -609,7 +553,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		if (splitter_value < 67.0)
 			src.set_widescreen(1)
 
-	src.screenSizeHelper.registerOnLoadCallback(CALLBACK(src, .proc/checkHiRes))
+	src.screenSizeHelper.registerOnLoadCallback(CALLBACK(src, PROC_REF(checkHiRes)))
 
 	var/is_vert_splitter = winget( src, "menu.horiz_split", "is-checked" ) != "true"
 
@@ -618,7 +562,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		if (splitter_value >= 67.0) //Was this client using widescreen last time? save that!
 			src.set_widescreen(1, splitter_value)
 
-		src.screenSizeHelper.registerOnLoadCallback(CALLBACK(src, .proc/checkScreenAspect))
+		src.screenSizeHelper.registerOnLoadCallback(CALLBACK(src, PROC_REF(checkScreenAspect)))
 	else
 
 		set_splitter_orientation(0, splitter_value)
@@ -639,9 +583,6 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 
 	if(winget(src, "menu.fullscreen", "is-checked") == "true")
 		winset(src, null, "mainwindow.titlebar=false;mainwindow.is-maximized=true")
-
-	if(winget(src, "menu.hide_status_bar", "is-checked") == "true")
-		winset(src, null, "mainwindow.statusbar=false")
 
 	if(winget(src, "menu.hide_menu", "is-checked") == "true")
 		winset(src, null, "mainwindow.menu='';menub.is-visible = true")
@@ -707,7 +648,7 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 				logTheThing(LOG_ADMIN, src.mob, "The following have the same [what]: [jointext(offenders_log, ", ")]")
 				logTheThing(LOG_DIARY, src.mob, "The following have the same [what]: [jointext(offenders_log, ", ")]", "access")
 			if(global.IP_alerts)
-				var/message = "<span class='alert'><B>Notice: </B></span><span class='internal'>The following have the same [what]: [jointext(offenders_message, ", ")]</span>"
+				var/message = "[SPAN_ALERT("<B>Notice:</B>")] [SPAN_INTERNAL("The following have the same [what]: [jointext(offenders_message, ", ")]")]"
 				if(isnull(message_who))
 					message_admins(message)
 				else
@@ -744,7 +685,6 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 		src.holder.dispose()
 		src.holder = null
 		src.clear_admin_verbs()
-		src.update_admins(null)
 		onlineAdmins -= src
 
 /client/proc/checkScreenAspect(list/params)
@@ -764,35 +704,10 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 
 /client/Command(command)
 	command = html_encode(command)
-	out(src, "<span class='alert'>Command \"[command]\" not recognised</span>")
-
-/client/proc/load_antag_tokens()
-	var/savefile/AT = LoadSavefile("data/AntagTokens.sav")
-	if (!AT)
-		if( cloud_available() )
-			antag_tokens = cloud_get( "antag_tokens" ) ? text2num(cloud_get( "antag_tokens" )) : 0
-		return
-
-	var/ATtoken
-	AT[ckey] >> ATtoken
-	if (!ATtoken)
-		antag_tokens = cloud_get( "antag_tokens" ) ? text2num(cloud_get( "antag_tokens" )) : 0
-		return
-	else
-		antag_tokens = ATtoken
-	if( cloud_available() )
-		antag_tokens += text2num( cloud_get( "antag_tokens" ) || "0" )
-		var/failed = cloud_put( "antag_tokens", antag_tokens )
-		if( failed )
-			logTheThing(LOG_DEBUG, src, "Failed to store antag tokens in the ~cloud~: [failed]")
-		else
-			AT[ckey] << null
+	boutput(src, SPAN_ALERT("Command \"[command]\" not recognised"))
 
 /client/proc/set_antag_tokens(amt as num)
-	antag_tokens = amt
-	if( cloud_available() )
-		cloud_put( "antag_tokens", amt )
-		. = TRUE
+	src.player.set_antag_tokens(amt)
 	/*
 	var/savefile/AT = LoadSavefile("data/AntagTokens.sav")
 	if (!AT) return
@@ -807,7 +722,11 @@ var/global/list/vpn_ip_checks = list() //assoc list of ip = true or ip = false. 
 /client/proc/load_persistent_bank()
 	persistent_bank_valid = cloud_available()
 
+#ifdef BONUS_POINTS
+	persistent_bank = 99999999
+#else
 	persistent_bank = cloud_get("persistent_bank") ? text2num(cloud_get("persistent_bank")) : FALSE
+#endif
 
 	if(!persistent_bank && cloud_available())
 		logTheThing(LOG_DEBUG, src, "first cloud_get failed but cloud is available!")
@@ -968,10 +887,11 @@ var/global/curr_day = null
 	save.cd = "general"
 	joined_date = save["joined"]
 	jd_warning(joined_date)
+	. = save
 
 /client/verb/ping()
 	set name = "Ping"
-	boutput(usr, "Pong")
+	boutput(usr, SPAN_HINT("Pong"))
 
 #ifdef RP_MODE
 /client/proc/cmd_rp_rules()
@@ -997,7 +917,7 @@ var/global/curr_day = null
 	var/datum/game_server/game_server = global.game_servers.find_server(server)
 
 	if (server)
-		boutput(usr, "You are being redirected to [game_server.name]...")
+		boutput(usr, "<h3 class='success'>You are being redirected to [game_server.name]...</span>")
 		usr << link(game_server.url)
 
 /client/verb/download_sprite(atom/A as null|mob|obj|turf in view(1))
@@ -1006,19 +926,19 @@ var/global/curr_day = null
 	set hidden = TRUE
 	if(!A)
 		var/datum/promise/promise = new
-		var/datum/targetable/refpicker/abil = new
+		var/datum/targetable/refpicker/nonadmin/abil = new
 		abil.promise = promise
 		src.mob.targeting_ability = abil
 		src.mob.update_cursor()
 		A = promise.wait_for_value()
 	if(!A)
-		boutput(src, "No target selected.")
+		boutput(src, SPAN_ALERT("No target selected."))
 		return
 	if(GET_DIST(src.mob, A) > 1 && !(src.holder || istype(src.mob, /mob/dead)))
-		boutput(src, "Target is too far away (it needs to be next to you).")
+		boutput(src, SPAN_ALERT("Target is too far away (it needs to be next to you)."))
 		return
-	if(!src.holder && ON_COOLDOWN(src.player, "download_sprite", 30 SECONDS))
-		boutput(src, "Verb on cooldown for [time_to_text(ON_COOLDOWN(src.player, "download_sprite", 0))].")
+	if(!src.holder && ON_COOLDOWN(src.player, "download_sprite", 5 SECONDS))
+		boutput(src, SPAN_ALERT("Verb on cooldown for [time_to_text(ON_COOLDOWN(src.player, "download_sprite", 0))]."))
 		return
 	var/icon/icon = getFlatIcon(A)
 	src << ftp(icon, "[ckey(A.name)]_[time2text(world.realtime,"YYYY-MM-DD")].png")
@@ -1073,7 +993,7 @@ var/global/curr_day = null
 				t = strip_html(t,500)
 			if (!( t ))
 				return
-			boutput(src.mob, "<span class='ahelp' class=\"bigPM\">Admin PM to-<b>[target] (Discord)</b>: [t]</span>")
+			boutput(src.mob, "<span class='ahelp bigPM'>Admin PM to-<b>[target] (Discord)</b>: [t]</span>")
 			logTheThing(LOG_AHELP, src, "<b>PM'd [target]</b>: [t]")
 			logTheThing(LOG_DIARY, src, "PM'd [target]: [t]", "ahelp")
 
@@ -1083,7 +1003,12 @@ var/global/curr_day = null
 			ircmsg["key2"] = target
 			ircmsg["name2"] = "Discord"
 			ircmsg["msg"] = html_decode(t)
+			ircmsg["previous_msgid"] = href_list["msgid"]
+			var/unique_message_id = md5("priv_msg_irc" + json_encode(ircmsg))
+			ircmsg["msgid"] = unique_message_id
 			ircbot.export_async("pm", ircmsg)
+
+			var/src_keyname = key_name(src.mob, 0, 0, additional_url_data="&msgid=[unique_message_id]")
 
 			//we don't use message_admins here because the sender/receiver might get it too
 			for (var/client/C)
@@ -1093,21 +1018,21 @@ var/global/curr_day = null
 					if (C.player_mode && !C.player_mode_ahelp)
 						continue
 					else
-						boutput(K, "<span class='ahelp'><b>PM: [key_name(src.mob,0,0)][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A> <i class='icon-arrow-right'></i> [target] (Discord)</b>: [t]</span>")
+						boutput(K, SPAN_AHELP("<b>PM: [src_keyname][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A> <i class='icon-arrow-right'></i> [target] (Discord)</b>: [t]"))
 
 		if ("priv_msg")
-			do_admin_pm(href_list["target"], usr) // See \admin\adminhelp.dm, changed to work off of ckeys instead of mobs.
+			do_admin_pm(href_list["target"], usr, previous_msgid=href_list["msgid"]) // See \admin\adminhelp.dm, changed to work off of ckeys instead of mobs.
 
 		if ("mentor_msg_irc")
 			if (!usr || !usr.client)
 				return
 			var/target = href_list["nick"]
-			var/t = input("Message:", text("Mentor Message")) as null|text
+			var/t = input("Message:", text("Mentor Message")) as null|message
 			if(!(src.holder && src.holder.level >= LEVEL_ADMIN))
-				t = strip_html(t, 1500)
+				t = strip_html(t, MAX_MESSAGE_LEN * 4, strip_newlines=FALSE)
 			if (!( t ))
 				return
-			boutput(src.mob, "<span class='mhelp'><b>MENTOR PM: TO [target] (Discord)</b>: <span class='message'>[t]</span></span>")
+			boutput(src.mob, SPAN_MHELP("<b>MENTOR PM: TO [target] (Discord)</b>: [SPAN_MESSAGE("[t]")]"))
 			logTheThing(LOG_MHELP, src, "<b>Mentor PM'd [target]</b>: [t]")
 			logTheThing(LOG_DIARY, src, "Mentor PM'd [target]: [t]", "admin")
 
@@ -1117,17 +1042,22 @@ var/global/curr_day = null
 			ircmsg["key2"] = target
 			ircmsg["name2"] = "Discord"
 			ircmsg["msg"] = html_decode(t)
+			ircmsg["previous_msgid"] = href_list["msgid"]
+			var/unique_message_id = md5("mentor_msg_irc" + json_encode(ircmsg))
+			ircmsg["msgid"] = unique_message_id
 			ircbot.export_async("mentorpm", ircmsg)
 
+			var/src_keyname = key_name(src.mob, 0, 0, 1, additional_url_data="&msgid=[unique_message_id]")
+
 			//we don't use message_admins here because the sender/receiver might get it too
-			var/mentormsg = "<span class='mhelp'><b>MENTOR PM: [key_name(src.mob,0,0,1)] <i class='icon-arrow-right'></i> [target] (Discord)</b>: <span class='message'>[t]</span></span>"
+			var/mentormsg = SPAN_MHELP("<b>MENTOR PM: [src_keyname] <i class='icon-arrow-right'></i> [target] (Discord)</b>: [SPAN_MESSAGE("[t]")]")
 			for (var/client/C)
 				if (C.can_see_mentor_pms() && C.key != usr.key)
 					if (C.holder)
 						if (C.player_mode && !C.player_mode_mhelp)
 							continue
 						else //Message admins
-							boutput(C, "<span class='mhelp'><b>MENTOR PM: [key_name(src.mob,0,0,1)][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A> <i class='icon-arrow-right'></i> [target] (Discord)</b>: <span class='message'>[t]</span></span>")
+							boutput(C, SPAN_MHELP("<b>MENTOR PM: [src_keyname][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A> <i class='icon-arrow-right'></i> [target] (Discord)</b>: [SPAN_MESSAGE("[t]")]"))
 					else //Message mentors
 						boutput(C, mentormsg)
 
@@ -1138,31 +1068,15 @@ var/global/curr_day = null
 				if (!usr || !usr.client)
 					return
 
-				var/t = input("Message:", text("Mentor Message")) as null|text
+				var/t = input("Message:", text("Mentor Message")) as null|message
 				if (href_list["target"])
 					M = ckey_to_mob(href_list["target"])
 				if (!(src.holder && src.holder.level >= LEVEL_ADMIN))
-					t = strip_html(t, 1500)
+					t = strip_html(t, MAX_MESSAGE_LEN * 4, strip_newlines=FALSE)
 				if (!( t ))
 					return
 				if (!src || !src.mob) //ZeWaka: Fix for null.client
 					return
-
-				if (src.holder)
-					boutput(M, "<span class='mhelp'><b>MENTOR PM: FROM [key_name(src.mob,0,0,1)]</b>: <span class='message'>[t]</span></span>")
-					M.playsound_local(M, 'sound/misc/mentorhelp.ogg', 100, flags = SOUND_IGNORE_SPACE, channel = VOLUME_CHANNEL_MENTORPM)
-					boutput(src.mob, "<span class='mhelp'><b>MENTOR PM: TO [key_name(M,0,0,1)][(M.real_name ? "/"+M.real_name : "")] <A HREF='?src=\ref[src.holder];action=adminplayeropts;targetckey=[M.ckey]' class='popt'><i class='icon-info-sign'></i></A></b>: <span class='message'>[t]</span></span>")
-				else
-					if (M.client && M.client.holder)
-						boutput(M, "<span class='mhelp'><b>MENTOR PM: FROM [key_name(src.mob,0,0,1)][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[M.client.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A></b>: <span class='message'>[t]</span></span>")
-						M.playsound_local(M, 'sound/misc/mentorhelp.ogg', 100, flags = SOUND_IGNORE_SPACE, channel = VOLUME_CHANNEL_MENTORPM)
-					else
-						boutput(M, "<span class='mhelp'><b>MENTOR PM: FROM [key_name(src.mob,0,0,1)]</b>: <span class='message'>[t]</span></span>")
-						M.playsound_local(M, 'sound/misc/mentorhelp.ogg', 100, flags = SOUND_IGNORE_SPACE, channel = VOLUME_CHANNEL_MENTORPM)
-					boutput(usr, "<span class='mhelp'><b>MENTOR PM: TO [key_name(M,0,0,1)]</b>: <span class='message'>[t]</span></span>")
-
-				logTheThing(LOG_MHELP, src.mob, "Mentor PM'd [constructTarget(M,"mentor_help")]: [t]")
-				logTheThing(LOG_DIARY, src.mob, "Mentor PM'd [constructTarget(M,"diary")]: [t]", "admin")
 
 				var/ircmsg[] = new()
 				ircmsg["key"] = src.mob && src ? src.key : ""
@@ -1170,16 +1084,38 @@ var/global/curr_day = null
 				ircmsg["key2"] = (M != null && M.client != null && M.client.key != null) ? M.client.key : ""
 				ircmsg["name2"] = (M != null && M.real_name != null) ? stripTextMacros(M.real_name) : ""
 				ircmsg["msg"] = html_decode(t)
+				ircmsg["previous_msgid"] = href_list["msgid"]
+				var/unique_message_id = md5("mentor_msg" + json_encode(ircmsg))
+				ircmsg["msgid"] = unique_message_id
 				ircbot.export_async("mentorpm", ircmsg)
 
-				var/mentormsg = "<span class='mhelp'><b>MENTOR PM: [key_name(src.mob,0,0,1)] <i class='icon-arrow-right'></i> [key_name(M,0,0,1)]</b>: <span class='message'>[t]</span></span>"
+				var/src_keyname = key_name(src.mob, 0, 0, 1, additional_url_data="&msgid=[unique_message_id]")
+				var/target_keyname = key_name(M, 0, 0, 1, additional_url_data="&msgid=[unique_message_id]")
+
+				if (src.holder)
+					boutput(M, SPAN_MHELP("<b>MENTOR PM: FROM [src_keyname]</b>: [SPAN_MESSAGE("[t]")]"))
+					M.playsound_local_not_inworld('sound/misc/mentorhelp.ogg', 100, flags = SOUND_IGNORE_SPACE | SOUND_SKIP_OBSERVERS, channel = VOLUME_CHANNEL_MENTORPM)
+					boutput(src.mob, SPAN_MHELP("<b>MENTOR PM: TO [target_keyname][(M.real_name ? "/"+M.real_name : "")] <A HREF='?src=\ref[src.holder];action=adminplayeropts;targetckey=[M.ckey]' class='popt'><i class='icon-info-sign'></i></A></b>: [SPAN_MESSAGE("[t]")]"))
+				else
+					if (M.client && M.client.holder)
+						boutput(M, SPAN_MHELP("<b>MENTOR PM: FROM [src_keyname][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[M.client.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A></b>: [SPAN_MESSAGE("[t]")]"))
+						M.playsound_local_not_inworld('sound/misc/mentorhelp.ogg', 100, flags = SOUND_IGNORE_SPACE | SOUND_SKIP_OBSERVERS, channel = VOLUME_CHANNEL_MENTORPM)
+					else
+						boutput(M, SPAN_MHELP("<b>MENTOR PM: FROM [src_keyname]</b>: [SPAN_MESSAGE("[t]")]"))
+						M.playsound_local_not_inworld('sound/misc/mentorhelp.ogg', 100, flags = SOUND_IGNORE_SPACE | SOUND_SKIP_OBSERVERS, channel = VOLUME_CHANNEL_MENTORPM)
+					boutput(usr, SPAN_MHELP("<b>MENTOR PM: TO [target_keyname]</b>: [SPAN_MESSAGE("[t]")]"))
+
+				logTheThing(LOG_MHELP, src.mob, "Mentor PM'd [constructTarget(M,"mentor_help")]: [t]")
+				logTheThing(LOG_DIARY, src.mob, "Mentor PM'd [constructTarget(M,"diary")]: [t]", "admin")
+
+				var/mentormsg = SPAN_MHELP("<b>MENTOR PM: [src_keyname] <i class='icon-arrow-right'></i> [target_keyname]</b>: [SPAN_MESSAGE("[t]")]")
 				for (var/client/C)
 					if (C.can_see_mentor_pms() && C.key != usr.key && (M && C.key != M.key))
 						if (C.holder)
 							if (C.player_mode && !C.player_mode_mhelp)
 								continue
 							else
-								boutput(C, "<span class='mhelp'><b>MENTOR PM: [key_name(src.mob,0,0,1)][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A> <i class='icon-arrow-right'></i> [key_name(M,0,0,1)]/[M.real_name] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[M.ckey]' class='popt'><i class='icon-info-sign'></i></A></b>: <span class='message'>[t]</span></span>")
+								boutput(C, SPAN_MHELP("<b>MENTOR PM: [src_keyname][(src.mob.real_name ? "/"+src.mob.real_name : "")] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[src.ckey]' class='popt'><i class='icon-info-sign'></i></A> <i class='icon-arrow-right'></i> [target_keyname]/[M.real_name] <A HREF='?src=\ref[C.holder];action=adminplayeropts;targetckey=[M.ckey]' class='popt'><i class='icon-info-sign'></i></A></b>: [SPAN_MESSAGE("[t]")]"))
 						else
 							boutput(C, mentormsg)
 
@@ -1201,7 +1137,7 @@ var/global/curr_day = null
 			ehjax.topic("main", href_list, src)
 
 		if("resourcePreloadComplete")
-			boutput(src, "<span class='notice'><b>Preload completed.</b></span>")
+			boutput(src, SPAN_NOTICE("<b>Preload completed.</b>"))
 			src.Browse(null, "window=resourcePreload")
 			return
 
@@ -1211,6 +1147,12 @@ var/global/curr_day = null
 
 	. = ..()
 	return
+
+/client/verb/open_link(link as text)
+	set name = ".openlink"
+	set hidden = TRUE
+	if(link)
+		src << link(link)
 
 /client/proc/mute(len = -1)
 	if (!src.ckey)
@@ -1251,7 +1193,7 @@ var/global/curr_day = null
 	var/client/C = input("For who", "For who", null) in clients
 	var/wavelength_shift = input("Shift wavelength bounds by <x> nm, should be in the range of -370 to 370", "Wavelength shift", 0) as num
 	if (wavelength_shift < -370 || wavelength_shift > 370)
-		boutput(usr, "Invalid value.")
+		boutput(usr, SPAN_ADMIN("Invalid value."))
 		return
 	var/s_r = 0
 	var/s_g = 0
@@ -1302,50 +1244,24 @@ var/global/curr_day = null
 
 	C.screen += M
 
-/client/proc/vpn_bonk(host, asn, organization, fraud_score, repeat_attempt = FALSE)
-	var/vpn_kick_string = {"
-				<!doctype html>
-				<html>
-					<head>
-						<title>VPN or Proxy Detected</title>
-					</head>
-					<body>
-						<h1>Warning: VPN or proxy connection detected</h1>
-
-						Please disable your VPN or proxy, close the game, and rejoin.<br>
-						<h2>Not using a VPN or proxy / Having trouble connecting?</h2>
-						If you are not using a VPN or proxy please join <a href="https://discord.com/invite/zd8t6pY">our Discord server</a> and and fill out <a href="https://dyno.gg/form/b39d898a">this form</a> for help whitelisting your account.
-					</body>
-				</html>
-			"}
-
-	if (repeat_attempt)
-		logTheThing(LOG_ADMIN, src, "[src.address] is using a vpn that they've already logged in with during this round.")
-		logTheThing(LOG_DIARY, src, "[src.address] is using a vpn that they've already logged in with during this round.", "admin")
-		message_admins("[key_name(src)] [src.address] attempted to connect with a VPN or proxy but was kicked!")
-	else
-		global.vpn_ip_checks["[src.address]"] = TRUE
-		var/msg_txt = "[src.address] attempted to connect via vpn or proxy. vpn info:[host ? " host: [host]," : ""] ASN: [asn], org: [organization][fraud_score ? ", fraud score: [fraud_score]" : ""]"
-
-		addPlayerNote(src.ckey, "VPN Blocker", msg_txt)
-		logTheThing(LOG_ADMIN, src, msg_txt)
-		logTheThing(LOG_DIARY, src, msg_txt, "admin")
-		message_admins("[key_name(src)] [msg_txt]")
-		ircbot.export_async("admin", list(key="VPN Blocker", name="[src.key]", msg=msg_txt))
-	if(do_compid_analysis)
-		do_computerid_test(src) //Will ban yonder fucker in case they are prix
-		check_compid_list(src) //Will analyze their computer ID usage patterns for aberrations
-	src.Browse(vpn_kick_string, "window=vpnbonked")
-	sleep(3 SECONDS)
-	if (src)
-		del(src)
-	return
-
 /client/verb/apply_depth_shadow()
 	set hidden = 1
 	set name ="apply-depth-shadow"
 
 	apply_depth_filter() //see _plane.dm
+
+/client/verb/toggle_parallax()
+	set hidden = 1
+	set name = "toggle-parallax"
+
+	if ((winget(src, "menu.toggle_parallax", "is-checked") == "true") && parallax_enabled)
+		qdel(src.parallax_controller)
+		src.parallax_controller = new(null, src)
+		src.mob?.register_parallax_signals()
+
+	else if (src.parallax_controller)
+		qdel(src.parallax_controller)
+		src.mob?.unregister_parallax_signals()
 
 /client/verb/apply_view_tint()
 	set hidden = 1
@@ -1363,7 +1279,7 @@ var/global/curr_day = null
 	s = clamp(s, 50, 150) / 100
 	src.set_saturation(s)
 	src.cloud_put("saturation", s)
-	boutput(usr, "<span class='notice'>You have changed your game saturation to [s * 100]%.</span>")
+	boutput(usr, SPAN_NOTICE("You have changed your game saturation to [s * 100]%."))
 
 /client/proc/set_view_size(var/x, var/y)
 	//These maximum values make for a near-fullscreen game view at 32x32 tile size, 1920x1080 monitor resolution.
@@ -1474,6 +1390,7 @@ var/global/curr_day = null
 		H.hud.add_object(H.stamina_bar, initial(H.stamina_bar.layer), "EAST-1, NORTH")
 		if(H.sims)
 			H.sims.add_hud()
+		H.update_equipment_screen_loc()
 
 /client/verb/set_tg_layout()
 	set hidden = 1
@@ -1645,11 +1562,6 @@ if([removeOnFinish])
 </html>
 	"}, "window=pregameBrowser")
 
-#ifndef SECRETS_ENABLED
-/client/proc/postscan(list/data)
-	return
-#endif
-
 /world/proc/showCinematic(var/name, var/removeOnFinish = 0)
 	for(var/client/C)
 		C.showCinematic(name, removeOnFinish)
@@ -1705,6 +1617,7 @@ mainwindow.hovertooltip.text-color=[_SKIN_TEXT];\
 #define _SKIN_COMMAND_BG "#28294c"
 		winset(src, null, SKIN_TEMPLATE)
 		chatOutput.changeTheme("theme-dark")
+		src.darkmode = TRUE
 #undef _SKIN_BG
 #undef _SKIN_INFO_TAB_BG
 #undef _SKIN_INFO_BG
@@ -1718,6 +1631,7 @@ mainwindow.hovertooltip.text-color=[_SKIN_TEXT];\
 	else
 		winset(src, null, SKIN_TEMPLATE)
 		chatOutput.changeTheme("theme-default")
+		src.darkmode = FALSE
 #undef _SKIN_BG
 #undef _SKIN_INFO_TAB_BG
 #undef _SKIN_INFO_BG

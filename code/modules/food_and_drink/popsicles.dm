@@ -15,7 +15,7 @@
 	attack_self(mob/user)
 		if (user.find_in_hand(src) && !src.broken)
 			user.visible_message("<b>[user]</b> bends [src] a little too far back and it snaps in half. Shoot!")
-			playsound(user, 'sound/impact_sounds/Flesh_Crush_1.ogg', 60, 1, 0, 2)
+			playsound(user, 'sound/impact_sounds/Flesh_Crush_1.ogg', 60, TRUE, 0, 2)
 			src.name = "broken popsicle stick"
 			src.icon_state = "stick-broken"
 			src.broken = 1
@@ -32,7 +32,7 @@
 
 	attack_self(var/mob/user)
 		if (user.find_in_hand(src))
-			boutput(user,"<span class='notice'><b>You unwrap [src].</b></span>")
+			boutput(user,SPAN_NOTICE("<b>You unwrap [src].</b>"))
 			var/obj/item/reagent_containers/food/snacks/popsicle/P = new /obj/item/reagent_containers/food/snacks/popsicle(src.loc)
 			user.put_in_hand_or_drop(P)
 			if(prob(8))
@@ -78,7 +78,7 @@
 			if("grape")
 				src.desc = "A purple popsicle, which appears to be \"Raisin' Hell Raisin\" flavor, which features a boost of \"Super Energy Raisin Juice,\" whatever that is."
 				R.add_reagent("wine", 5)
-				R.add_reagent("robustissin", 5) //?
+				R.add_reagent("cold_medicine", 5)
 				R.add_reagent("coffee", 5)
 				R.add_reagent("bread", 5)
 				R.add_reagent("milk", 5)
@@ -88,7 +88,6 @@
 				R.add_reagent("juice_lime", 5)
 				R.add_reagent("luminol", 5)
 				R.add_reagent("chalk", 5)
-				R.add_reagent("urine", 5)
 			if("cherry")
 				src.desc = "A red popsicle, which appears to be \"'Roid Rage Redberry\" flavor, guaranteed to put you into a rage until you taste more."
 				R.add_reagent("juice_strawberry", 5)
@@ -100,7 +99,7 @@
 				src.desc = "A green popsicle, which appears to be \"Green Apple Gastroenteritis\" flavor, which boasts a more active digestive system."
 				R.add_reagent("juice_apple", 5)
 				R.add_reagent("cider", 5)
-				R.add_reagent("space_ipecac", 5) //?
+				R.add_reagent("ipecac", 5) //?
 				R.add_reagent("gcheese", 5)
 				R.add_reagent("hunchback", 5)
 			if("blueberry")
@@ -117,7 +116,7 @@
 		return
 
 	proc/melt(var/mob/user)
-		boutput(user,"<span class='notice'><b>[src] has already melted! Damn!</b></span>")
+		boutput(user,SPAN_NOTICE("<b>[src] has already melted! Damn!</b>"))
 		src.reagents.reaction(get_turf(src))
 		user.u_equip(src)
 		src.set_loc(get_turf(user))

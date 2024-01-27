@@ -132,7 +132,7 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 		if (duration)
 			msg += " It will end in [duration / 10] seconds."
 		msg += "</span><br><br>"
-		out(world, msg)
+		boutput(world, msg)
 
 		//if the vote was triggered with a duration, wait that long and end it
 		if (duration)
@@ -175,7 +175,7 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 		src.passiveVotes = new()
 		map_vote_holder.clear_votes()
 		//no one voted :(
-		if (votes.len == 0)
+		if (length(votes) == 0)
 			return
 
 		//determine winner
@@ -192,7 +192,7 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 
 			//a tie is detected! make a note of which maps are tied
 			else if (mapVotes == highestVotes)
-				if (tiedMaps.len == 0)
+				if (length(tiedMaps) == 0)
 					//retroactively note that the previously highest voted map is now tied
 					tiedMaps += src.voteChosenMap
 				tiedMaps += map
@@ -220,7 +220,7 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 		if (src.voteChosenMap == src.current)
 			msg += " (No change)"
 		msg += "</span><br><br>"
-		out(world, msg)
+		boutput(world, msg)
 
 		//log this
 		logTheThing(LOG_ADMIN, null, "The players voted for <b>[src.voteChosenMap]</b> as the next map.")
@@ -251,7 +251,7 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 		var/list/reportData = src.previousVotes["vote[vote]"]
 		for (var/mapName in reportData)
 			var/list/voters = reportData[mapName]
-			html += "<b>[mapName]</b> - [voters.len] total vote[voters.len == 1 ? "" : "s"]<br>"
+			html += "<b>[mapName]</b> - [voters.len] total vote[length(voters) == 1 ? "" : "s"]<br>"
 
 			var/count = 1
 			for (var/ckey in voters)
@@ -459,6 +459,7 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 
 /obj/mapVoteLink
 	name = "<span style='color: green; text-decoration: underline;'>Map Vote</span>"
+	flags = NOSPLASH
 
 	Click()
 		var/client/C = usr.client
@@ -475,13 +476,13 @@ var/global/datum/mapSwitchHandler/mapSwitcher
 				//chosenMap = "Density"
 			if(istype(I, /obj/item/reagent_containers/food/snacks/donut))
 				chosenMap = "Donut 2"
-			if(istype(I, /obj/item/grab))
-				chosenMap = "Wrestlemap"
+			//if(istype(I, /obj/item/grab))
+				//chosenMap = "Wrestlemap"
 
 		if (mapSwitcher.playersVoting)
 			if(chosenMap)
 				map_vote_holder.special_vote(C,chosenMap)
-				boutput(C.mob, "Map vote successful???")
+				boutput(C.mob, SPAN_SUCCESS("Map vote successful???"))
 			else
 				map_vote_holder.show_window(C)
 

@@ -1,6 +1,6 @@
 /obj/item/device/radio/intercom/ship
 	name = "Communication Panel"
-	anchored = 1
+	anchored = ANCHORED
 
 /obj/item/device/radio/intercom/ship/send_hear()
 	if (src.listening)
@@ -58,7 +58,7 @@
 				linked_magnet = MM
 				ui_interact(usr)
 				return null
-			boutput(usr, "<span class='alert'>No magnet found in range of seven meters.</span>")
+			boutput(usr, SPAN_ALERT("No magnet found in range of seven meters."))
 			return null
 
 	syndicate

@@ -8,7 +8,7 @@
 	desc = "Console with a sizable lever and hand pad for activation of a harmonic siphon from a distance."
 	icon = 'icons/obj/machines/neodrill_32x32.dmi'
 	icon_state = "siph-control-0"
-	anchored = 1
+	anchored = ANCHORED
 	density = 1
 	var/obj/machinery/siphon/core/paired_core = null
 	var/lever_active = 0
@@ -62,7 +62,7 @@
 
 			var/obj/item/I = user.equipped()
 			if(I) //no hitting the controls with stuff to operate them!
-				src.attackby(I,user)
+				src.Attackby(I,user)
 				return
 
 			//Determine spot that was clicked
@@ -171,7 +171,7 @@
 
 /obj/machinery/computer/siphon_control/attack_hand(var/mob/user as mob)
 	if(!src.allowed(user))
-		boutput(user, "<span class='alert'>Access Denied.</span>")
+		boutput(user, SPAN_ALERT("Access Denied."))
 		return
 
 	if(..())
@@ -344,7 +344,7 @@
 
 /obj/machinery/computer/siphon_db/attack_hand(var/mob/user as mob)
 	if(!src.allowed(user))
-		boutput(user, "<span class='alert'>Access Denied.</span>")
+		boutput(user, SPAN_ALERT("Access Denied."))
 		return
 
 	if(..())

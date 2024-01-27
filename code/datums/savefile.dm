@@ -93,6 +93,7 @@
 		F["[profileNum]_be_syndicate_commander"] << src.be_syndicate_commander
 		F["[profileNum]_be_spy"] << src.be_spy
 		F["[profileNum]_be_gangleader"] << src.be_gangleader
+		F["[profileNum]_be_gangmember"] << src.be_gangmember
 		F["[profileNum]_be_revhead"] << src.be_revhead
 		F["[profileNum]_be_changeling"] << src.be_changeling
 		F["[profileNum]_be_wizard"] << src.be_wizard
@@ -103,25 +104,26 @@
 		F["[profileNum]_be_blob"] << src.be_blob
 		F["[profileNum]_be_conspirator"] << src.be_conspirator
 		F["[profileNum]_be_flock"] << src.be_flock
+		F["[profileNum]_be_salvager"] << src.be_salvager
 		F["[profileNum]_be_misc"] << src.be_misc
 
 		// UI settings. Ehhhhh.
 		F["[profileNum]_hud_style"] << src.hud_style
 		F["[profileNum]_tcursor"] << src.target_cursor
 
-		if(src.traitPreferences.isValid())
+		if(src.traitPreferences.isValid(src.traitPreferences.traits_selected, src.custom_parts))
 			F["[profileNum]_traits"] << src.traitPreferences.traits_selected
-
-
-
+			F["[profileNum]_custom_parts"] << src.custom_parts
 		// Global options
 		F["tooltip"] << (src.tooltip_option ? src.tooltip_option : TOOLTIP_ALWAYS)
+		F["scrollwheel_limb_targeting"] << src.scrollwheel_limb_targeting
 		F["changelog"] << src.view_changelog
 		F["score"] << src.view_score
 		F["tickets"] << src.view_tickets
 		F["sounds"] << src.admin_music_volume
 		F["radio_sounds"] << src.radio_music_volume
 		F["clickbuffer"] << src.use_click_buffer
+		F["help_text_in_examine"] << src.help_text_in_examine
 		F["font_size"] << src.font_size
 
 		F["see_mentor_pms"] << src.see_mentor_pms
@@ -133,6 +135,9 @@
 		F["flying_chat_hidden"] << src.flying_chat_hidden
 		F["auto_capitalization"] << src.auto_capitalization
 		F["local_deachat"] << src.local_deadchat
+
+		F["tgui_fancy"] << src.tgui_fancy
+		F["tgui_lock"] << src.tgui_lock
 
 		if (returnSavefile)
 			return F
@@ -261,17 +266,17 @@
 			F["[profileNum]_underwear_style_name"] >> AH.underwear
 			F["[profileNum]_underwear_color"] >> AH.u_color
 			if(!istype(src.AH.customization_first,/datum/customization_style))
-				src.AH.customization_first = find_style_by_name(src.AH.customization_first)
+				src.AH.customization_first = find_style_by_name(src.AH.customization_first, no_gimmick_hair=TRUE)
 			if(!istype(src.AH.customization_second,/datum/customization_style))
-				src.AH.customization_second = find_style_by_name(src.AH.customization_second)
+				src.AH.customization_second = find_style_by_name(src.AH.customization_second, no_gimmick_hair=TRUE)
 			if(!istype(src.AH.customization_third,/datum/customization_style))
-				src.AH.customization_third = find_style_by_name(src.AH.customization_third)
+				src.AH.customization_third = find_style_by_name(src.AH.customization_third, no_gimmick_hair=TRUE)
 			if(!istype(src.AH.customization_first_original,/datum/customization_style))
-				src.AH.customization_first_original = find_style_by_name(src.AH.customization_first_original)
+				src.AH.customization_first_original = find_style_by_name(src.AH.customization_first_original, no_gimmick_hair=TRUE)
 			if(!istype(src.AH.customization_second_original,/datum/customization_style))
-				src.AH.customization_second_original = find_style_by_name(src.AH.customization_second_original)
+				src.AH.customization_second_original = find_style_by_name(src.AH.customization_second_original, no_gimmick_hair=TRUE)
 			if(!istype(src.AH.customization_third_original,/datum/customization_style))
-				src.AH.customization_third_original = find_style_by_name(src.AH.customization_third_original)
+				src.AH.customization_third_original = find_style_by_name(src.AH.customization_third_original, no_gimmick_hair=TRUE)
 
 		// Job prefs
 		F["[profileNum]_job_prefs_1"] >> src.job_favorite
@@ -283,6 +288,7 @@
 		F["[profileNum]_be_syndicate_commander"] >> src.be_syndicate_commander
 		F["[profileNum]_be_spy"] >> src.be_spy
 		F["[profileNum]_be_gangleader"] >> src.be_gangleader
+		F["[profileNum]_be_gangmember"] >> src.be_gangmember
 		F["[profileNum]_be_revhead"] >> src.be_revhead
 		F["[profileNum]_be_changeling"] >> src.be_changeling
 		F["[profileNum]_be_wizard"] >> src.be_wizard
@@ -293,6 +299,7 @@
 		F["[profileNum]_be_blob"] >> src.be_blob
 		F["[profileNum]_be_conspirator"] >> src.be_conspirator
 		F["[profileNum]_be_flock"] >> src.be_flock
+		F["[profileNum]_be_salvager"] >> src.be_salvager
 		F["[profileNum]_be_misc"] >> src.be_misc
 
 		// UI settings...
@@ -300,16 +307,23 @@
 		F["[profileNum]_tcursor"] >> src.target_cursor
 
 		F["[profileNum]_traits"] >> src.traitPreferences.traits_selected
+		F["[profileNum]_custom_parts"] >> src.custom_parts
 
 
 		// Game setting options, not per-profile
 		F["tooltip"] >> src.tooltip_option
+		F["scrollwheel_limb_targeting"] >> src.scrollwheel_limb_targeting
+		if (isnull(src.scrollwheel_limb_targeting))
+			src.scrollwheel_limb_targeting = SCROLL_TARGET_ALWAYS
 		F["changelog"] >> src.view_changelog
 		F["score"] >> src.view_score
 		F["tickets"] >> src.view_tickets
 		F["sounds"] >> src.admin_music_volume
 		F["radio_sounds"] >> src.radio_music_volume
 		F["clickbuffer"] >> src.use_click_buffer
+		F["help_text_in_examine"] >> src.help_text_in_examine
+		if (isnull(src.help_text_in_examine))
+			src.help_text_in_examine = TRUE
 		F["font_size"] >> src.font_size
 
 		F["see_mentor_pms"] >> src.see_mentor_pms
@@ -321,6 +335,13 @@
 		F["flying_chat_hidden"] >> src.flying_chat_hidden
 		F["auto_capitalization"] >> src.auto_capitalization
 		F["local_deachat"] >> src.local_deadchat
+		if(isnull(src.local_deadchat))
+			src.local_deadchat = TRUE
+
+		F["tgui_fancy"] >> src.tgui_fancy
+		if(isnull(src.tgui_fancy))
+			src.tgui_fancy = 1
+		F["tgui_lock"] >> src.tgui_lock
 
 
 		if (isnull(src.name_first) || !length(src.name_first) || isnull(src.name_last) || !length(src.name_last))
@@ -348,14 +369,33 @@
 			src.target_cursor = "Default"
 
 
+		if (isnull(src.custom_parts))
+			src.custom_parts = list(
+				"l_arm" = "arm_default_left",
+				"r_arm" = "arm_default_right",
+			)
+
 		// Validate trait choices
 		if (src.traitPreferences.traits_selected == null)
 			src.traitPreferences.traits_selected = list()
 
 		for (var/T as anything in src.traitPreferences.traits_selected)
-			if (!(T in traitList)) src.traitPreferences.traits_selected.Remove(T)
+			if (!(T in traitList))
+				src.traitPreferences.traits_selected.Remove(T)
+				//migration for removed traits
+				if (T == "roboarms")
+					src.custom_parts["l_arm"] = "arm_robo_left"
+					src.custom_parts["r_arm"] = "arm_robo_right"
+					src.profile_modified = TRUE
+				else if (T == "syntharms")
+					src.custom_parts["l_arm"] = "arm_plant_left"
+					src.custom_parts["r_arm"] = "arm_plant_right"
+					src.profile_modified = TRUE
+				else if (T == "onearmed")
+					src.custom_parts["l_arm"] = "arm_missing_left"
+					src.profile_modified = TRUE
 
-		if (!src.traitPreferences.isValid())
+		if (!src.traitPreferences.isValid(src.traitPreferences.traits_selected, src.custom_parts))
 			src.traitPreferences.traits_selected.Cut()
 			tgui_alert(user, "Your traits couldn't be loaded. Please reselect your traits.", "Reselect traits")
 

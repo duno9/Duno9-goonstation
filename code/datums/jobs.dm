@@ -1,4 +1,4 @@
-/datum/job/
+/datum/job
 	var/name = null
 	var/list/alias_names = null
 	var/initial_name = null
@@ -12,6 +12,7 @@
 	///can you roll this job if you rolled antag with a non-traitor-allowed favourite job (e.g.: prevent sec mains from forcing only captain antag rounds)
 	var/allow_antag_fallthrough = TRUE
 	var/allow_spy_theft = 1
+	var/can_join_gangs = TRUE
 	var/cant_spawn_as_rev = 0 // For the revoltion game mode. See jobprocs.dm for notes etc (Convair880).
 	var/cant_spawn_as_con = 0 // Prevents this job spawning as a conspirator in the conspiracy gamemode.
 	var/requires_whitelist = 0
@@ -58,6 +59,13 @@
 	var/objective = null
 	var/rounds_needed_to_play = 0 //0 by default, set to the amount of rounds they should have in order to play this
 	var/map_can_autooverride = 1 // if set to 0 map can't change limit on this job automatically (it can still set it manually)
+	/// Does this job use the name and appearance from the character profile? (for tracking respawned names)
+	var/uses_character_profile = TRUE
+	/// The faction to be assigned to the mob on setup uses flags from factions.dm
+	var/faction = 0
+
+	var/short_description = null //! Description provided when a player hovers over the job name in latejoin menu
+	var/wiki_link = null //! Link to the wiki page for this job
 
 	New()
 		..()
@@ -70,37 +78,28 @@
 			M.verbs += /mob/proc/recite_miranda
 			M.verbs += /mob/proc/add_miranda
 			if (!isnull(M.mind))
-				M.mind.miranda = "You have the right to remain silent. Anything you say can and will be used against you in a NanoTrasen court of Space Law. You have the right to a rent-an-attorney. If you cannot afford one, a monkey in a suit and funny hat will be appointed to you."
+				M.mind.miranda = DEFAULT_MIRANDA
+		M.faction |= src.faction
 
 		SPAWN(0)
 			if (receives_implant && ispath(receives_implant))
 				var/mob/living/carbon/human/H = M
 				var/obj/item/implant/I = new receives_implant(M)
-				I.implanted = 1
-				if(ishuman(M)) H.implant.Add(I)
-				I.implanted(M)
 				if (src.receives_disk && ishuman(M))
-					if (istype(H.back, /obj/item/storage))
-						var/obj/item/disk/data/floppy/D = locate(/obj/item/disk/data/floppy) in H.back
+					if (H.back?.storage)
+						var/obj/item/disk/data/floppy/D = locate(/obj/item/disk/data/floppy) in H.back.storage.get_contents()
 						if (D)
 							var/datum/computer/file/clone/R = locate(/datum/computer/file/clone/) in D.root.contents
 							if (R)
 								R.fields["imp"] = "\ref[I]"
 
 			var/give_access_implant = ismobcritter(M)
-			if(!spawn_id && (access.len > 0 || access.len == 1 && access[1] != access_fuck_all))
+			if(!spawn_id && (length(access) > 0 || length(access) == 1 && access[1] != access_fuck_all))
 				give_access_implant = 1
 			if (give_access_implant)
 				var/obj/item/implant/access/I = new /obj/item/implant/access(M)
 				I.access.access = src.access.Copy()
-				I.owner = M
 				I.uses = -1
-				I.set_loc(M)
-				I.implanted = 1
-				if(ishuman(M))
-					var/mob/living/carbon/human/H = M
-					H.implant.Add(I)
-				I.implanted(M)
 
 			if (src.special_spawn_location && !no_special_spawn)
 				var/location = special_spawn_location
@@ -132,9 +131,6 @@
 				if(M.real_name != default && M.real_name != orig_real)
 					phrase_log.log_phrase("name-[ckey(src.name)]", M.real_name, no_duplicates=TRUE)
 
-			if (M.traitHolder && !M.traitHolder.hasTrait("loyalist"))
-				cant_spawn_as_rev = 1 //Why would an NT Loyalist be a revolutionary?
-
 // Command Jobs
 
 ABSTRACT_TYPE(/datum/job/command)
@@ -142,6 +138,13 @@ ABSTRACT_TYPE(/datum/job/command)
 	linkcolor = "#00CC00"
 	slot_card = /obj/item/card/id/command
 	map_can_autooverride = 0
+	can_join_gangs = FALSE
+
+	special_setup(mob/M, no_special_spawn)
+		. = ..()
+		var/image/image = image('icons/mob/antag_overlays.dmi', icon_state = "head", loc = M)
+		image.appearance_flags = PIXEL_SCALE | RESET_ALPHA | RESET_COLOR | RESET_TRANSFORM | KEEP_APART
+		get_image_group(CLIENT_IMAGE_GROUP_HEADS_OF_STAFF).add_image(image)
 
 /datum/job/command/captain
 	name = "Captain"
@@ -156,21 +159,21 @@ ABSTRACT_TYPE(/datum/job/command)
 	announce_on_join = 1
 	allow_spy_theft = 0
 	allow_antag_fallthrough = FALSE
+	wiki_link = "https://wiki.ss13.co/Captain"
 
 	slot_card = /obj/item/card/id/gold
 	slot_belt = list(/obj/item/device/pda2/captain)
 	slot_back = list(/obj/item/storage/backpack/captain)
 	slot_jump = list(/obj/item/clothing/under/rank/captain)
 	slot_suit = list(/obj/item/clothing/suit/armor/captain)
-	slot_foot = list(/obj/item/clothing/shoes/swat)
+	slot_foot = list(/obj/item/clothing/shoes/swat/captain)
+	slot_glov = list(/obj/item/clothing/gloves/swat/captain)
 	slot_head = list(/obj/item/clothing/head/caphat)
 	slot_eyes = list(/obj/item/clothing/glasses/sunglasses)
 	slot_ears = list(/obj/item/device/radio/headset/command/captain)
 	slot_poc1 = list(/obj/item/disk/data/floppy/read_only/authentication)
 	items_in_backpack = list(/obj/item/storage/box/id_kit,/obj/item/device/flash)
-#ifdef RP_MODE
-	rounds_needed_to_play = 20
-#endif
+	rounds_needed_to_play = 30
 
 	New()
 		..()
@@ -181,7 +184,7 @@ ABSTRACT_TYPE(/datum/job/command)
 		//name = "NT-SO Commander"
 		name = null
 		limit = 0
-		slot_suit = list(/obj/item/clothing/suit/armor/centcomm)
+		slot_suit = list(/obj/item/clothing/suit/armor/captain/centcomm)
 		slot_jump = list(/obj/item/clothing/under/misc/turds)
 		slot_head = list(/obj/item/clothing/head/centhat)
 		slot_belt = list(/obj/item/tank/emergency_oxygen/extended)
@@ -201,6 +204,7 @@ ABSTRACT_TYPE(/datum/job/command)
 	name = "Head of Personnel"
 	limit = 1
 	wages = PAY_IMPORTANT
+	wiki_link = "https://wiki.ss13.co/Head_of_Personnel"
 
 	allow_spy_theft = 0
 	allow_antag_fallthrough = FALSE
@@ -211,18 +215,20 @@ ABSTRACT_TYPE(/datum/job/command)
 
 #ifdef SUBMARINE_MAP
 	slot_suit = list(/obj/item/clothing/suit/armor/hopcoat)
-	slot_back = list(/obj/item/storage/backpack/withO2)
-	slot_belt = list(/obj/item/device/pda2/heads)
+	slot_back = list(/obj/item/storage/backpack)
+	slot_belt = list(/obj/item/device/pda2/hop)
 	slot_jump = list(/obj/item/clothing/under/suit/hop)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	slot_ears = list(/obj/item/device/radio/headset/command/hop)
+	slot_poc1 = list(/obj/item/pocketwatch)
 	items_in_backpack = list(/obj/item/storage/box/id_kit,/obj/item/device/flash,/obj/item/storage/box/accessimp_kit)
 #else
-	slot_back = list(/obj/item/storage/backpack/withO2)
-	slot_belt = list(/obj/item/device/pda2/heads)
+	slot_back = list(/obj/item/storage/backpack)
+	slot_belt = list(/obj/item/device/pda2/hop)
 	slot_jump = list(/obj/item/clothing/under/suit/hop)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	slot_ears = list(/obj/item/device/radio/headset/command/hop)
+	slot_poc1 = list(/obj/item/pocketwatch)
 	items_in_backpack = list(/obj/item/storage/box/id_kit,/obj/item/device/flash,/obj/item/storage/box/accessimp_kit)
 #endif
 
@@ -239,6 +245,7 @@ ABSTRACT_TYPE(/datum/job/command)
 	receives_miranda = 1
 	allow_traitors = 0
 	allow_spy_theft = 0
+	can_join_gangs = FALSE
 	cant_spawn_as_con = 1
 	cant_spawn_as_rev = 1
 	announce_on_join = 1
@@ -247,6 +254,7 @@ ABSTRACT_TYPE(/datum/job/command)
 	receives_badge = 1
 	receives_implant = /obj/item/implant/health/security/anti_mindhack
 	items_in_backpack = list(/obj/item/device/flash)
+	wiki_link = "https://wiki.ss13.co/Head_of_Security"
 
 
 #ifdef SUBMARINE_MAP
@@ -254,8 +262,8 @@ ABSTRACT_TYPE(/datum/job/command)
 	slot_suit = list(/obj/item/clothing/suit/armor/vest)
 	slot_back = list(/obj/item/storage/backpack/security)
 	slot_belt = list(/obj/item/device/pda2/hos)
-	slot_poc1 = list(/obj/item/requisition_token/security)
-	slot_poc2 = list(/obj/item/storage/security_pouch) //replaces sec starter kit
+	slot_poc1 = list(/obj/item/storage/security_pouch) //replaces sec starter kit
+	slot_poc2 = list(/obj/item/requisition_token/security)
 	slot_foot = list(/obj/item/clothing/shoes/swat)
 	slot_head = list(/obj/item/clothing/head/hos_hat)
 	slot_ears = list(/obj/item/device/radio/headset/command/hos)
@@ -265,8 +273,8 @@ ABSTRACT_TYPE(/datum/job/command)
 #else
 	slot_back = list(/obj/item/storage/backpack/security)
 	slot_belt = list(/obj/item/device/pda2/hos)
-	slot_poc1 = list(/obj/item/requisition_token/security)
-	slot_poc2 = list(/obj/item/storage/security_pouch) //replaces sec starter kit
+	slot_poc1 = list(/obj/item/storage/security_pouch) //replaces sec starter kit
+	slot_poc2 = list(/obj/item/requisition_token/security)
 	slot_jump = list(/obj/item/clothing/under/rank/head_of_security)
 	slot_suit = list(/obj/item/clothing/suit/armor/vest)
 	slot_foot = list(/obj/item/clothing/shoes/swat)
@@ -313,13 +321,14 @@ ABSTRACT_TYPE(/datum/job/command)
 	cant_spawn_as_rev = 1
 	announce_on_join = 1
 	allow_spy_theft = 0
+	wiki_link = "https://wiki.ss13.co/Chief_Engineer"
 
 	slot_back = list(/obj/item/storage/backpack/engineering)
 	slot_belt = list(/obj/item/device/pda2/chiefengineer)
 	slot_glov = list(/obj/item/clothing/gloves/yellow)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
-	slot_head = list(/obj/item/clothing/head/helmet/hardhat)
-	slot_eyes = list(/obj/item/clothing/glasses/meson)
+	slot_head = list(/obj/item/clothing/head/helmet/hardhat/chief_engineer)
+	slot_eyes = list(/obj/item/clothing/glasses/toggleable/meson)
 	slot_jump = list(/obj/item/clothing/under/rank/chief_engineer)
 	slot_ears = list(/obj/item/device/radio/headset/command/ce)
 	slot_poc1 = list(/obj/item/paper/book/from_file/pocketguide/engineering)
@@ -360,12 +369,13 @@ ABSTRACT_TYPE(/datum/job/command)
 	allow_spy_theft = 0
 	cant_spawn_as_rev = 1
 	announce_on_join = 1
+	wiki_link = "https://wiki.ss13.co/Research_Director"
 
-	slot_back = list(/obj/item/storage/backpack/withO2)
+	slot_back = list(/obj/item/storage/backpack/research)
 	slot_belt = list(/obj/item/device/pda2/research_director)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	slot_jump = list(/obj/item/clothing/under/rank/research_director)
-	slot_suit = list(/obj/item/clothing/suit/labcoat)
+	slot_suit = list(/obj/item/clothing/suit/labcoat/research_director)
 	slot_rhan = list(/obj/item/clipboard/with_pen)
 	slot_eyes = list(/obj/item/clothing/glasses/spectro)
 	slot_ears = list(/obj/item/device/radio/headset/command/rd)
@@ -393,8 +403,9 @@ ABSTRACT_TYPE(/datum/job/command)
 	allow_spy_theft = 0
 	cant_spawn_as_rev = 1
 	announce_on_join = 1
+	wiki_link = "https://wiki.ss13.co/Medical_Director"
 
-	slot_back = list(/obj/item/storage/backpack/withO2)
+	slot_back = list(/obj/item/storage/backpack/medic)
 	slot_glov = list(/obj/item/clothing/gloves/latex)
 	slot_belt = list(/obj/item/storage/belt/medical/prepared)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
@@ -424,6 +435,7 @@ ABSTRACT_TYPE(/datum/job/command)
 	allow_spy_theft = 0
 	cant_spawn_as_rev = 1
 	announce_on_join = 1
+	wiki_link = "https://wiki.ss13.co/Communications_Officer"
 
 	slot_ears = list(/obj/item/device/radio/headset/command/comm_officer)
 	slot_eyes = list(/obj/item/clothing/glasses/sunglasses)
@@ -434,7 +446,7 @@ ABSTRACT_TYPE(/datum/job/command)
 	slot_belt = list(/obj/item/device/pda2/heads)
 	slot_poc1 = list(/obj/item/pen/fancy)
 	slot_head = list(/obj/item/clothing/head/sea_captain/comm_officer_hat)
-	items_in_backpack = list(/obj/item/device/camera_viewer, /obj/item/device/audio_log, /obj/item/device/flash)
+	items_in_backpack = list(/obj/item/device/camera_viewer/security, /obj/item/device/audio_log, /obj/item/device/flash)
 
 	New()
 		..()
@@ -460,9 +472,10 @@ ABSTRACT_TYPE(/datum/job/security)
 	wages = PAY_TRADESMAN
 	allow_traitors = 0
 	allow_spy_theft = 0
+	can_join_gangs = FALSE
 	cant_spawn_as_con = 1
 	cant_spawn_as_rev = 1
-	receives_implant = /obj/item/implant/health/security
+	receives_implant = /obj/item/implant/health/security/anti_mindhack
 	receives_disk = 1
 	receives_security_disk = 1
 	receives_badge = 1
@@ -477,6 +490,7 @@ ABSTRACT_TYPE(/datum/job/security)
 	slot_poc1 = list(/obj/item/storage/security_pouch) //replaces sec starter kit
 	slot_poc2 = list(/obj/item/requisition_token/security)
 	rounds_needed_to_play = 30 //higher barrier of entry than before but now with a trainee job to get into the rythym of things to compensate
+	wiki_link = "https://wiki.ss13.co/Security_Officer"
 
 	New()
 		..()
@@ -494,6 +508,7 @@ ABSTRACT_TYPE(/datum/job/security)
 		limit = 3
 		cant_spawn_as_con = 1
 		wages = PAY_UNTRAINED
+		receives_implant = /obj/item/implant/health/security
 		slot_back = list(/obj/item/storage/backpack/security)
 		slot_jump = list(/obj/item/clothing/under/rank/security/assistant)
 		slot_suit = list()
@@ -504,6 +519,7 @@ ABSTRACT_TYPE(/datum/job/security)
 		slot_poc2 = list(/obj/item/requisition_token/security/assistant)
 		items_in_backpack = list(/obj/item/paper/book/from_file/space_law)
 		rounds_needed_to_play = 5
+		wiki_link = "https://wiki.ss13.co/Security_Assistant"
 
 		New()
 			..()
@@ -537,7 +553,7 @@ ABSTRACT_TYPE(/datum/job/security)
 	receives_badge = 1
 	cant_spawn_as_rev = 1
 	allow_antag_fallthrough = FALSE
-	slot_back = list(/obj/item/storage/backpack/withO2)
+	slot_back = list(/obj/item/storage/backpack)
 	slot_belt = list(/obj/item/storage/belt/security/shoulder_holster)
 	slot_poc1 = list(/obj/item/device/pda2/forensic)
 	slot_jump = list(/obj/item/clothing/under/rank/det)
@@ -549,6 +565,7 @@ ABSTRACT_TYPE(/datum/job/security)
 	items_in_backpack = list(/obj/item/clothing/glasses/vr,/obj/item/storage/box/detectivegun)
 	map_can_autooverride = 0
 	rounds_needed_to_play = 15 // Half of sec, please stop shooting people with lethals
+	wiki_link = "https://wiki.ss13.co/Detective"
 
 	New()
 		..()
@@ -562,7 +579,7 @@ ABSTRACT_TYPE(/datum/job/security)
 		M.traitHolder.addTrait("training_drinker")
 
 		if (M.traitHolder && !M.traitHolder.hasTrait("smoker"))
-			slot_poc1 = list(/obj/item/device/light/zippo) //Smokers start with a trinket version
+			items_in_backpack += list(/obj/item/device/light/zippo) //Smokers start with a trinket version
 
 // Research Jobs
 
@@ -582,6 +599,7 @@ ABSTRACT_TYPE(/datum/job/research)
 	slot_suit = list(/obj/item/clothing/suit/labcoat/genetics)
 	slot_ears = list(/obj/item/device/radio/headset/medical)
 	slot_poc1 = list(/obj/item/device/analyzer/genetic)
+	wiki_link = "https://wiki.ss13.co/Geneticist"
 
 	New()
 		..()
@@ -630,6 +648,7 @@ ABSTRACT_TYPE(/datum/job/research)
 	slot_ears = list(/obj/item/device/radio/headset/medical)
 	slot_poc1 = list(/obj/item/device/pda2/medical/robotics)
 	slot_poc2 = list(/obj/item/reagent_containers/mender/brute)
+	wiki_link = "https://wiki.ss13.co/Roboticist"
 
 	New()
 		..()
@@ -656,6 +675,7 @@ ABSTRACT_TYPE(/datum/job/research)
 	slot_ears = list(/obj/item/device/radio/headset/research)
 	slot_eyes = list(/obj/item/clothing/glasses/spectro)
 	slot_poc1 = list(/obj/item/pen = 50, /obj/item/pen/fancy = 25, /obj/item/pen/red = 5, /obj/item/pen/pencil = 20)
+	wiki_link = "https://wiki.ss13.co/Scientist"
 
 	New()
 		..()
@@ -676,8 +696,9 @@ ABSTRACT_TYPE(/datum/job/research)
 	slot_eyes = list(/obj/item/clothing/glasses/healthgoggles/upgraded)
 	slot_poc1 = list(/obj/item/device/pda2/medical)
 	slot_poc2 = list(/obj/item/paper/book/from_file/pocketguide/medical)
-	items_in_backpack = list(/obj/item/crowbar) // cogwerks: giving medics a guaranteed air tank, stealing it from roboticists (those fucks)
+	items_in_backpack = list(/obj/item/crowbar/blue) // cogwerks: giving medics a guaranteed air tank, stealing it from roboticists (those fucks)
 	// 2018: guaranteed air tanks now spawn in boxes (depending on backpack type) to save room
+	wiki_link = "https://wiki.ss13.co/Medical_Doctor"
 
 	New()
 		..()
@@ -725,6 +746,7 @@ ABSTRACT_TYPE(/datum/job/engineering)
 	slot_ears = list(/obj/item/device/radio/headset/shipping)
 	slot_poc1 = list(/obj/item/paper/book/from_file/pocketguide/quartermaster)
 	slot_poc2 = list(/obj/item/device/appraisal)
+	wiki_link = "https://wiki.ss13.co/Quartermaster"
 
 	New()
 		..()
@@ -747,7 +769,7 @@ ABSTRACT_TYPE(/datum/job/engineering)
 	wages = PAY_TRADESMAN
 	slot_back = list(/obj/item/storage/backpack/engineering)
 	slot_mask = list(/obj/item/clothing/mask/breath)
-	slot_eyes = list(/obj/item/clothing/glasses/meson)
+	slot_eyes = list(/obj/item/clothing/glasses/toggleable/meson)
 	slot_belt = list(/obj/item/storage/belt/mining/prepared)
 	slot_jump = list(/obj/item/clothing/under/rank/overalls)
 	slot_foot = list(/obj/item/clothing/shoes/orange)
@@ -766,6 +788,7 @@ ABSTRACT_TYPE(/datum/job/engineering)
 	items_in_backpack = list(/obj/item/crowbar,
 							/obj/item/paper/book/from_file/pocketguide/mining)
 	#endif
+	wiki_link = "https://wiki.ss13.co/Miner"
 
 	New()
 		..()
@@ -776,7 +799,7 @@ ABSTRACT_TYPE(/datum/job/engineering)
 		..()
 		if (!M)
 			return
-		M.bioHolder.AddEffect("training_miner")
+		M.traitHolder.addTrait("training_miner")
 
 /datum/job/engineering/engineer
 	name = "Engineer"
@@ -784,7 +807,7 @@ ABSTRACT_TYPE(/datum/job/engineering)
 	wages = PAY_TRADESMAN
 	slot_back = list(/obj/item/storage/backpack/engineering)
 	slot_belt = list(/obj/item/storage/belt/utility/prepared)
-	slot_jump = list(/obj/item/clothing/under/rank/mechanic)
+	slot_jump = list(/obj/item/clothing/under/rank/engineer)
 	slot_foot = list(/obj/item/clothing/shoes/orange)
 	slot_lhan = list(/obj/item/storage/toolbox/mechanical/engineer_spawn)
 	slot_glov = list(/obj/item/clothing/gloves/yellow)
@@ -795,6 +818,7 @@ ABSTRACT_TYPE(/datum/job/engineering)
 #else
 	items_in_backpack = list(/obj/item/paper/book/from_file/pocketguide/engineering, /obj/item/old_grenade/oxygen)
 #endif
+	wiki_link = "https://wiki.ss13.co/Engineer"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -840,6 +864,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_suit = list(/obj/item/clothing/suit/chef)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
 	items_in_backpack = list(/obj/item/kitchen/rollingpin, /obj/item/kitchen/utensil/knife/cleaver, /obj/item/bell/kitchen)
+	wiki_link = "https://wiki.ss13.co/Chef"
 
 	New()
 		..()
@@ -865,6 +890,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_poc1 = list(/obj/item/cloth/towel/bar)
 	slot_poc2 = list(/obj/item/reagent_containers/food/drinks/cocktailshaker)
 	items_in_backpack = list(/obj/item/gun/kinetic/sawnoff, /obj/item/ammo/bullets/abg, /obj/item/paper/book/from_file/pocketguide/bartending)
+	wiki_link = "https://wiki.ss13.co/Bartender"
 
 	New()
 		..()
@@ -891,6 +917,9 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_glov = list(/obj/item/clothing/gloves/black)
 	slot_poc1 = list(/obj/item/paper/botany_guide)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	wiki_link = "https://wiki.ss13.co/Botanist"
+
+	faction = FACTION_BOTANY
 
 	New()
 		..()
@@ -901,14 +930,16 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	name = "Rancher"
 	limit = 1
 	wages = PAY_TRADESMAN
-	slot_belt = list(/obj/item/device/pda2/botanist)
+	slot_belt = list(/obj/item/storage/belt/rancher/prepared)
 	slot_jump = list(/obj/item/clothing/under/rank/rancher)
 	slot_head = list(/obj/item/clothing/head/cowboy)
 	slot_foot = list(/obj/item/clothing/shoes/westboot/brown/rancher)
 	slot_glov = list(/obj/item/clothing/gloves/black)
 	slot_poc1 = list(/obj/item/paper/ranch_guide)
+	slot_poc2 = list(/obj/item/device/pda2/botanist)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
-	items_in_backpack = list(/obj/item/fishing_rod, /obj/item/chicken_carrier, /obj/item/device/camera_viewer/ranch,/obj/item/storage/box/knitting)
+	items_in_backpack = list(/obj/item/device/camera_viewer/ranch,/obj/item/storage/box/knitting)
+	wiki_link = "https://wiki.ss13.co/Rancher"
 
 	New()
 		..()
@@ -927,6 +958,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
 	slot_poc1 = list(/obj/item/device/pda2/janitor)
 	items_in_backpack = list(/obj/item/reagent_containers/glass/bucket)
+	wiki_link = "https://wiki.ss13.co/Janitor"
 
 	New()
 		..()
@@ -941,7 +973,8 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_belt = list(/obj/item/device/pda2/chaplain)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
-	slot_lhan = list(/obj/item/storage/bible/loaded)
+	slot_lhan = list(/obj/item/bible/loaded)
+	wiki_link = "https://wiki.ss13.co/Chaplain"
 
 	New()
 		..()
@@ -964,9 +997,10 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	low_priority_job = 1
 	cant_allocate_unwanted = 1
 	map_can_autooverride = 0
-	slot_jump = list(/obj/item/clothing/under/rank)
+	slot_jump = list(/obj/item/clothing/under/rank/assistant)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	wiki_link = "https://wiki.ss13.co/Staff_Assistant"
 
 	New()
 		..()
@@ -990,6 +1024,9 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_ears = list(/obj/item/device/radio/headset/clown)
 	items_in_belt = list(/obj/item/cloth/towel/clown)
 	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Clown"
+
+	faction = FACTION_CLOWN
 
 	New()
 		..()
@@ -1001,11 +1038,8 @@ ABSTRACT_TYPE(/datum/job/civilian)
 		if (!M)
 			return
 
-		// Yaaaaaay!
-		M.AddComponent(/datum/component/death_confetti)
 
-		M.bioHolder.AddEffect("clumsy", magical=1)
-		M.bioHolder.AddEffect("accent_comic", magical=1)
+		M.traitHolder.addTrait("training_clown")
 
 // AI and Cyborgs
 
@@ -1022,6 +1056,8 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_back = list()
 	slot_belt = list()
 	items_in_backpack = list()
+	uses_character_profile = FALSE
+	wiki_link = "https://wiki.ss13.co/Artificial_Intelligence"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -1041,6 +1077,8 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_back = list()
 	slot_belt = list()
 	items_in_backpack = list()
+	uses_character_profile = FALSE
+	wiki_link = "https://wiki.ss13.co/Cyborg"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -1064,11 +1102,12 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_ears = list(/obj/item/device/radio/headset/engineer)
 	slot_rhan = list(/obj/item/tank/jetpack)
 	slot_eyes = list(/obj/item/clothing/glasses/construction)
-	slot_poc1 = list(/obj/item/spacecash/fivehundred)
+	slot_poc1 = list(/obj/item/currency/spacecash/fivehundred)
 	slot_poc2 = list(/obj/item/room_planner)
 	slot_suit = list(/obj/item/clothing/suit/space/engineer)
 	slot_head = list(/obj/item/clothing/head/helmet/space/engineer)
 	slot_mask = list(/obj/item/clothing/mask/breath)
+	wiki_link = "https://wiki.ss13.co/Construction_Game_Mode" // ?
 
 	items_in_backpack = list(/obj/item/rcd/construction, /obj/item/rcd_ammo/big, /obj/item/rcd_ammo/big, /obj/item/material_shaper,/obj/item/room_marker)
 
@@ -1083,8 +1122,53 @@ ABSTRACT_TYPE(/datum/job/civilian)
 		src.access = get_access("Construction Worker")
 		return
 
-/datum/job/special/lawyer
-	name = "Lawyer"
+/datum/job/special/hairdresser
+	name = "Hairdresser"
+	wages = PAY_UNTRAINED
+	limit = 0
+	slot_jump = list(/obj/item/clothing/under/misc/barber)
+	slot_head = list(/obj/item/clothing/head/boater_hat)
+	slot_foot = list(/obj/item/clothing/shoes/black)
+	slot_poc1 = list(/obj/item/scissors)
+	slot_poc2 = list(/obj/item/razor_blade)
+	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	wiki_link = "https://wiki.ss13.co/Barber"
+
+	New()
+		..()
+		src.access = get_access("Barber")
+		return
+
+/datum/job/special/mime
+	name = "Mime"
+	limit = 1
+	wages = PAY_DUMBCLOWN*2 // lol okay whatever
+	slot_belt = list(/obj/item/device/pda2)
+	slot_head = list(/obj/item/clothing/head/mime_bowler)
+	slot_mask = list(/obj/item/clothing/mask/mime)
+	slot_jump = list(/obj/item/clothing/under/misc/mime/alt)
+	slot_suit = list(/obj/item/clothing/suit/scarf)
+	slot_glov = list(/obj/item/clothing/gloves/latex)
+	slot_foot = list(/obj/item/clothing/shoes/black)
+	slot_poc1 = list(/obj/item/pen/crayon/white)
+	slot_poc2 = list(/obj/item/paper)
+	items_in_backpack = list(/obj/item/baguette)
+	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Mime"
+
+	New()
+		..()
+		src.access = get_access("Mime")
+		return
+
+	special_setup(var/mob/living/carbon/human/M)
+		..()
+		if (!M)
+			return
+		M.traitHolder.addTrait("training_mime")
+
+/datum/job/special/attorney
+	name = "Attorney"
 	linkcolor = "#FF0000"
 	wages = PAY_DOCTORATE
 	limit = 0
@@ -1092,12 +1176,21 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_jump = list(/obj/item/clothing/under/misc/lawyer)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_lhan = list(/obj/item/storage/briefcase)
-	slot_rhan = list(/obj/item/paper/book/from_file/space_law)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	wiki_link = "https://wiki.ss13.co/Lawyer"
 
 	New()
 		..()
 		src.access = get_access("Lawyer")
+		return
+
+/datum/job/special/attorney/judge
+	name = "Judge"
+	limit = 0
+
+	New()
+		..()
+		src.access = get_all_accesses()
 		return
 
 /datum/job/special/vice_officer
@@ -1106,6 +1199,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	limit = 0
 	wages = PAY_TRADESMAN
 	allow_traitors = 0
+	can_join_gangs = FALSE
 	cant_spawn_as_con = 1
 	cant_spawn_as_rev = 1
 	receives_badge = 1
@@ -1117,6 +1211,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_ears = list( /obj/item/device/radio/headset/security)
 	slot_poc1 = list(/obj/item/storage/security_pouch) //replaces sec starter kit
 	slot_poc2 = list(/obj/item/requisition_token/security)
+	wiki_link = "https://wiki.ss13.co/Part-Time_Vice_Officer"
 
 	New()
 		..()
@@ -1136,6 +1231,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_ears = list(/obj/item/device/radio/headset/security)
 	slot_poc1 = list(/obj/item/device/detective_scanner)
 	items_in_backpack = list(/obj/item/tank/emergency_oxygen)
+	// missing wiki link
 
 	New()
 		..()
@@ -1153,6 +1249,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_mask = list(/obj/item/clothing/mask/gas)
 	slot_lhan = list(/obj/item/tank/air)
 	slot_ears = list(/obj/item/device/radio/headset/research)
+	// missing wiki link
 
 	New()
 		..()
@@ -1168,6 +1265,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_jump = list(/obj/item/clothing/under/rank/scientist)
 	slot_foot = list(/obj/item/clothing/shoes/white)
 	slot_ears = list(/obj/item/device/radio/headset/research)
+	wiki_link = "https://wiki.ss13.co/Chemist"
 
 	New()
 		..()
@@ -1184,6 +1282,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_foot = list(/obj/item/clothing/shoes/white)
 	slot_belt = list(/obj/item/device/pda2/toxins)
 	slot_ears = list(/obj/item/device/radio/headset/research)
+	wiki_link = "https://wiki.ss13.co/Research_Assistant"
 
 	New()
 		..()
@@ -1200,6 +1299,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_foot = list(/obj/item/clothing/shoes/red)
 	slot_ears = list(/obj/item/device/radio/headset/medical)
 	slot_belt = list(/obj/item/device/pda2/medical)
+	wiki_link = "https://wiki.ss13.co/Medical_Assistant"
 
 	New()
 		..()
@@ -1212,12 +1312,14 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	limit = 0
 	wages = PAY_TRADESMAN
 	slot_belt = list(/obj/item/device/pda2/atmos)
+	slot_eyes = list(/obj/item/clothing/glasses/toggleable/atmos)
 	slot_jump = list(/obj/item/clothing/under/misc/atmospheric_technician)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_lhan = list(/obj/item/storage/toolbox/mechanical)
 	slot_poc1 = list(/obj/item/device/analyzer/atmospheric)
 	slot_ears = list(/obj/item/device/radio/headset/engineer)
 	items_in_backpack = list(/obj/item/tank/mini_oxygen,/obj/item/crowbar)
+	wiki_link = "https://wiki.ss13.co/Atmospheric_Technician"
 
 	New()
 		..()
@@ -1234,81 +1336,12 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	slot_ears = list(/obj/item/device/radio/headset/engineer)
 	slot_belt = list(/obj/item/device/pda2/technical_assistant)
+	wiki_link = "https://wiki.ss13.co/Technical_Assistant"
 
 	New()
 		..()
 		src.access = get_access("Technical Assistant")
 		return
-
-/datum/job/special/boxer
-	name = "Boxer"
-	wages = PAY_UNTRAINED
-	limit = 0
-	slot_jump = list(/obj/item/clothing/under/shorts)
-	slot_foot = list(/obj/item/clothing/shoes/black)
-	slot_glov = list(/obj/item/clothing/gloves/boxing)
-	alt_names = list("Boxer", "Fighter", "Wrestler")
-	change_name_on_spawn = 1
-
-	New()
-		..()
-		src.access = get_access("Boxer")
-		return
-
-/datum/job/special/barber
-	name = "Barber"
-	wages = PAY_UNTRAINED
-	limit = 0
-	slot_jump = list(/obj/item/clothing/under/misc/barber)
-	slot_head = list(/obj/item/clothing/head/boater_hat)
-	slot_foot = list(/obj/item/clothing/shoes/black)
-	slot_poc1 = list(/obj/item/scissors)
-	slot_poc2 = list(/obj/item/razor_blade)
-	slot_ears = list(/obj/item/device/radio/headset/civilian)
-
-	New()
-		..()
-		src.access = get_access("Barber")
-		return
-
-/datum/job/special/mailman
-	name = "Mailman"
-	wages = PAY_TRADESMAN
-	limit = 0
-	slot_jump = list(/obj/item/clothing/under/misc/mail/syndicate)
-	slot_head = list(/obj/item/clothing/head/mailcap)
-	slot_foot = list(/obj/item/clothing/shoes/brown)
-	slot_back = list(/obj/item/storage/backpack/satchel)
-	slot_ears = list(/obj/item/device/radio/headset/mail)
-	items_in_backpack = list(/obj/item/wrapping_paper, /obj/item/paper_bin, /obj/item/scissors, /obj/item/stamp)
-	alt_names = list("Head of Deliverying", "Head of Mailmanning")
-
-	New()
-		..()
-		src.access = get_access("Mailman")
-		return
-
-/datum/job/special/tourist
-	name = "Tourist"
-	limit = 0
-	linkcolor = "#FF99FF"
-	slot_back = list()
-	slot_belt = list(/obj/item/storage/fanny)
-	slot_jump = list(/obj/item/clothing/under/misc/tourist)
-	slot_poc1 = list(/obj/item/camera_film)
-	slot_poc2 = list(/obj/item/spacecash/random/tourist) // Exact amount is randomized.
-	slot_foot = list(/obj/item/clothing/shoes/tourist)
-	slot_lhan = list(/obj/item/camera)
-	slot_rhan = list(/obj/item/storage/photo_album)
-	change_name_on_spawn = 1
-
-	special_setup(var/mob/living/carbon/human/M)
-		..()
-		if (!M)
-			return
-		if(prob(25))
-			var/morph = pick(/datum/mutantrace/lizard,/datum/mutantrace/skeleton,/datum/mutantrace/ithillid,/datum/mutantrace/martian,/datum/mutantrace/amphibian)
-			M.set_mutantrace(morph)
 
 
 /datum/job/special/space_cowboy
@@ -1326,48 +1359,12 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_poc2 = list(/obj/item/device/light/zippo/gold)
 	slot_lhan = list(/obj/item/whip)
 	slot_back = list(/obj/item/storage/backpack/satchel)
+	// missing wiki link
 
 	New()
 		..()
 		src.access = get_access("Space Cowboy")
 		return
-
-/datum/job/special/mime
-	name = "Mime"
-	limit = 1
-	wages = PAY_DUMBCLOWN*2 // lol okay whatever
-	slot_belt = list(/obj/item/device/pda2)
-	slot_head = list(/obj/item/clothing/head/mime_bowler)
-	slot_mask = list(/obj/item/clothing/mask/mime)
-	slot_jump = list(/obj/item/clothing/under/misc/mime/alt)
-	slot_suit = list(/obj/item/clothing/suit/scarf)
-	slot_glov = list(/obj/item/clothing/gloves/latex)
-	slot_foot = list(/obj/item/clothing/shoes/black)
-	slot_poc1 = list(/obj/item/pen/crayon/white)
-	slot_poc2 = list(/obj/item/paper)
-	items_in_backpack = list(/obj/item/baguette)
-	change_name_on_spawn = 1
-
-	New()
-		..()
-		src.access = get_access("Mime")
-		return
-
-	special_setup(var/mob/living/carbon/human/M)
-		..()
-		if (!M)
-			return
-		M.bioHolder.AddEffect("mute", magical=1)
-		M.bioHolder.AddEffect("blankman", magical=1)
-
-/datum/job/special/musician
-	name = "Musician"
-	wages = PAY_UNTRAINED
-	slot_jump = list(/obj/item/clothing/under/suit/pinstripe)
-	slot_head = list(/obj/item/clothing/head/flatcap)
-	slot_foot = list(/obj/item/clothing/shoes/brown)
-	slot_ears = list(/obj/item/device/radio/headset/civilian)
-	items_in_backpack = list(/obj/item/instrument/saxophone,/obj/item/instrument/guitar,/obj/item/instrument/bagpipe,/obj/item/instrument/fiddle)
 
 // randomizd gimmick jobs
 
@@ -1379,6 +1376,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	slot_jump = list(/obj/item/clothing/under/suit/purple)
 	//change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Jobs#Gimmick_Jobs" // fallback for those without their own page
 
 	New()
 		..()
@@ -1403,6 +1401,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_poc1 = list(/obj/item/device/pda2/medical_director)
 	alt_names = list("Neurological Specialist", "Ophthalmic Specialist", "Thoracic Specialist", "Orthopaedic Specialist", "Maxillofacial Specialist",
 	  "Vascular Specialist", "Anaesthesiologist", "Acupuncturist", "Medical Director's Assistant")
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	New()
 		..()
@@ -1419,13 +1418,14 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	name = "VIP"
 	wages = PAY_EXECUTIVE
 	linkcolor = "#FF0000"
-	slot_jump = list(/obj/item/clothing/under/suit)
+	slot_jump = list(/obj/item/clothing/under/suit/black)
 	slot_head = list(/obj/item/clothing/head/that)
 	slot_eyes = list(/obj/item/clothing/glasses/monocle)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_lhan = list(/obj/item/storage/secure/sbriefcase)
 	items_in_backpack = list(/obj/item/baton/cane)
 	alt_names = list("Senator", "President", "CEO", "Board Member", "Mayor", "Vice-President", "Governor")
+	wiki_link = "https://wiki.ss13.co/VIP"
 
 	New()
 		..()
@@ -1439,10 +1439,8 @@ ABSTRACT_TYPE(/datum/job/civilian)
 
 		var/obj/item/storage/secure/sbriefcase/B = M.find_type_in_hand(/obj/item/storage/secure/sbriefcase)
 		if (B && istype(B))
-			var/obj/item/stamped_bullion/G = new /obj/item/stamped_bullion
-			G.set_loc(B)
-			G = new /obj/item/stamped_bullion
-			G.set_loc(B)
+			for (var/i = 1 to 2)
+				B.storage.add_contents(new /obj/item/stamped_bullion(B))
 
 		return
 
@@ -1452,7 +1450,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	receives_miranda = 1
 	cant_spawn_as_rev = 1
 	receives_badge = 1
-	slot_back = list(/obj/item/storage/backpack/withO2)
+	slot_back = list(/obj/item/storage/backpack)
 	slot_belt = list(/obj/item/device/pda2/heads)
 	slot_jump = list(/obj/item/clothing/under/misc/lawyer/black) // so they can slam tables
 	slot_foot = list(/obj/item/clothing/shoes/brown)
@@ -1463,11 +1461,15 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_lhan = list(/obj/item/storage/briefcase)
 	slot_rhan = list(/obj/item/device/ticket_writer)
 	items_in_backpack = list(/obj/item/device/flash)
+	wiki_link = "https://wiki.ss13.co/Inspector"
 
 	New()
 		..()
 		src.access = get_access("Inspector")
 		return
+
+	proc/inspector_miranda()
+		return "You have been found to be in breach of Nanotrasen corporate regulation [rand(1,100)][pick(uppercase_letters)]. You are allowed a grace period of 5 minutes to correct this infringement before you may be subjected to disciplinary action including but not limited to: strongly worded tickets, reduction in pay, and being buried in paperwork for the next [rand(10,20)] standard shifts."
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -1476,10 +1478,11 @@ ABSTRACT_TYPE(/datum/job/civilian)
 
 		var/obj/item/storage/briefcase/B = M.find_type_in_hand(/obj/item/storage/briefcase)
 		if (B && istype(B))
-			new /obj/item/instrument/whistle(B)
+			B.storage.add_contents(new /obj/item/instrument/whistle(B))
 			var/obj/item/clipboard/with_pen/inspector/clipboard = new /obj/item/clipboard/with_pen/inspector(B)
+			B.storage.add_contents(clipboard)
 			clipboard.set_owner(M)
-
+		M.mind?.set_miranda(PROC_REF(inspector_miranda))
 		return
 
 /datum/job/special/random/director
@@ -1488,7 +1491,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	cant_spawn_as_rev = 1
 	wages = PAY_EXECUTIVE
 
-	slot_back = list(/obj/item/storage/backpack/withO2)
+	slot_back = list(/obj/item/storage/backpack)
 	slot_belt = list(/obj/item/device/pda2/heads)
 	slot_jump = list(/obj/item/clothing/under/misc/NT)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
@@ -1498,6 +1501,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_eyes = list(/obj/item/clothing/glasses/sunglasses)
 	slot_lhan = list(/obj/item/clipboard/with_pen)
 	items_in_backpack = list(/obj/item/device/flash)
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	New()
 		..()
@@ -1512,6 +1516,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	alt_names = list("Diplomat", "Ambassador")
 	cant_spawn_as_rev = 1
 	change_name_on_spawn = 1
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	New()
 		..()
@@ -1532,6 +1537,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_mask = list(/obj/item/clothing/mask/monkey_translator)
 	change_name_on_spawn = 1
 	starting_mutantrace = /datum/mutantrace/monkey
+	wiki_link = "https://wiki.ss13.co/Monkey"
 
 /datum/job/special/random/union
 	name = "Union Rep"
@@ -1540,6 +1546,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_lhan = list(/obj/item/storage/briefcase)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	alt_names = list("Assistants Union Rep", "Cyborgs Union Rep", "Union Rep", "Security Union Rep", "Doctors Union Rep", "Engineers Union Rep", "Miners Union Rep")
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -1548,7 +1555,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 
 		var/obj/item/storage/briefcase/B = M.find_type_in_hand(/obj/item/storage/briefcase)
 		if (B && istype(B))
-			new /obj/item/clipboard/with_pen(B)
+			B.storage.add_contents(new /obj/item/clipboard/with_pen(B))
 
 		return
 
@@ -1562,6 +1569,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	alt_names = list("Salesman", "Merchant")
 	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Salesman"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -1574,10 +1582,8 @@ ABSTRACT_TYPE(/datum/job/civilian)
 
 		var/obj/item/storage/briefcase/B = M.find_type_in_hand(/obj/item/storage/briefcase)
 		if (B && istype(B))
-			var/obj/item/stamped_bullion/G = new /obj/item/stamped_bullion
-			G.set_loc(B)
-			G = new /obj/item/stamped_bullion
-			G.set_loc(B)
+			for (var/i = 1 to 2)
+				B.storage.add_contents(new /obj/item/stamped_bullion(B))
 
 		return
 
@@ -1591,6 +1597,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_poc1 = list(/obj/item/instrument/whistle)
 	slot_glov = list(/obj/item/clothing/gloves/boxing)
 	items_in_backpack = list(/obj/item/football,/obj/item/football,/obj/item/basketball,/obj/item/basketball)
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 /datum/job/special/random/journalist
 	name = "Journalist"
@@ -1601,6 +1608,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_poc1 = list(/obj/item/camera)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	items_in_backpack = list(/obj/item/camera_film/large)
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -1609,10 +1617,10 @@ ABSTRACT_TYPE(/datum/job/civilian)
 
 		var/obj/item/storage/briefcase/B = M.find_type_in_hand(/obj/item/storage/briefcase)
 		if (B && istype(B))
-			new /obj/item/device/camera_viewer{network = "Zeta"}(B)
-			new /obj/item/clothing/head/helmet/camera(B)
-			new /obj/item/device/audio_log(B)
-			new /obj/item/clipboard/with_pen(B)
+			B.storage.add_contents(new /obj/item/device/camera_viewer/public(B))
+			B.storage.add_contents(new /obj/item/clothing/head/helmet/camera(B))
+			B.storage.add_contents(new /obj/item/device/audio_log(B))
+			B.storage.add_contents(new /obj/item/clipboard/with_pen(B))
 
 		return
 
@@ -1620,7 +1628,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	name = "Apiculturist"
 	wages = PAY_TRADESMAN
 	slot_jump = list(/obj/item/clothing/under/rank/beekeeper)
-	slot_suit = list(/obj/item/clothing/suit/bio_suit/beekeeper)
+	slot_suit = list(/obj/item/clothing/suit/hazard/beekeeper)
 	slot_head = list(/obj/item/clothing/head/bio_hood/beekeeper)
 	slot_poc1 = list(/obj/item/reagent_containers/food/snacks/beefood)
 	slot_poc2 = list(/obj/item/paper/book/from_file/bee_book)
@@ -1631,6 +1639,9 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
 	items_in_backpack = list(/obj/item/bee_egg_carton, /obj/item/bee_egg_carton, /obj/item/bee_egg_carton, /obj/item/reagent_containers/food/snacks/beefood, /obj/item/reagent_containers/food/snacks/beefood)
 	alt_names = list("Apiculturist", "Apiarist")
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
+
+	faction = FACTION_BOTANY
 
 	New()
 		..()
@@ -1650,6 +1661,23 @@ ABSTRACT_TYPE(/datum/job/civilian)
 
 		M.bioHolder.AddEffect("bee", magical=1) //They're one with the bees!
 
+
+/datum/job/special/random/angler
+	name = "Angler"
+	wages = PAY_TRADESMAN
+	slot_jump = list(/obj/item/clothing/under/rank/angler)
+	slot_head = list(/obj/item/clothing/head/black)
+	slot_foot = list(/obj/item/clothing/shoes/galoshes/waders)
+	slot_glov = list(/obj/item/clothing/gloves/black)
+	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	items_in_backpack = list(/obj/item/fishing_rod/basic)
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
+
+	New()
+		..()
+		src.access = get_access("Rancher")
+		return
+
 /datum/job/special/random/souschef
 	name = "Sous-Chef"
 	wages = PAY_UNTRAINED
@@ -1659,11 +1687,18 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_head = list(/obj/item/clothing/head/souschefhat)
 	slot_suit = list(/obj/item/clothing/suit/apron)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	// missing wiki link, should we link to chef instead?
 
 	New()
 		..()
 		src.access = get_access("Sous-Chef")
 		return
+
+	special_setup(var/mob/living/carbon/human/M)
+		..()
+		if (!M)
+			return
+		M.traitHolder.addTrait("training_chef")
 
 /datum/job/special/random/waiter
 	name = "Waiter"
@@ -1675,6 +1710,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_lhan = list(/obj/item/plate/tray)
 	slot_poc1 = list(/obj/item/cloth/towel/white)
 	items_in_backpack = list(/obj/item/storage/box/glassbox,/obj/item/storage/box/cutlery)
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	New()
 		..()
@@ -1691,6 +1727,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_suit = list(/obj/item/clothing/suit/labcoat)
 	slot_ears = list(/obj/item/device/radio/headset/medical)
 	items_in_backpack = list(/obj/item/storage/box/beakerbox, /obj/item/storage/pill_bottle/cyberpunk)
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	New()
 		..()
@@ -1727,9 +1764,10 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_back = list(/obj/item/storage/backpack/satchel)
 	slot_belt = list(/obj/item/device/pda2)
 	slot_poc1 = list(/obj/item/reagent_containers/food/drinks/coffee)
-	items_in_backpack = list(/obj/item/device/camera_viewer, /obj/item/device/audio_log, /obj/item/storage/box/record/radio/host)
+	items_in_backpack = list(/obj/item/device/camera_viewer/security, /obj/item/device/audio_log, /obj/item/storage/box/record/radio/host)
 	alt_names = list("Radio Show Host", "Talk Show Host")
 	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Radio_Host"
 
 	New()
 		..()
@@ -1750,6 +1788,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_poc2 = list(/obj/item/reagent_containers/food/drinks/bottle/gin)
 	items_in_backpack = list(/obj/item/luggable_computer/personal, /obj/item/clipboard/with_pen, /obj/item/paper_bin, /obj/item/stamp)
 	alt_names = list("Psychiatrist", "Psychologist", "Psychotherapist", "Therapist", "Counselor", "Life Coach") // All with slightly different connotations
+	// missing wiki link, parent fallback to https://wiki.ss13.co/Jobs#Gimmick_Jobs
 
 	New()
 		..()
@@ -1763,10 +1802,11 @@ ABSTRACT_TYPE(/datum/job/civilian)
 	slot_jump = list(/obj/item/clothing/under/misc/casualjeansblue)
 	slot_head = list(/obj/item/clothing/head/mime_beret)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
-	slot_poc1 = list(/obj/item/spacecash/twenty)
+	slot_poc1 = list(/obj/item/currency/spacecash/twenty)
 	slot_poc2 = list(/obj/item/pen/pencil)
 	slot_lhan = list(/obj/item/storage/toolbox/artistic)
 	items_in_backpack = list(/obj/item/canvas, /obj/item/canvas, /obj/item/storage/box/crayon/basic ,/obj/item/paint_can/random)
+	// missing wiki link, does not have a mention on https://wiki.ss13.co/Jobs
 
 #ifdef HALLOWEEN
 /*
@@ -1775,6 +1815,7 @@ ABSTRACT_TYPE(/datum/job/civilian)
 ABSTRACT_TYPE(/datum/job/special/halloween)
 /datum/job/special/halloween
 	linkcolor = "#FF7300"
+	wiki_link = "https://wiki.ss13.co/Jobs#Spooktober_Jobs"
 
 /datum/job/special/halloween/blue_clown
 	name = "Blue Clown"
@@ -1791,6 +1832,8 @@ ABSTRACT_TYPE(/datum/job/special/halloween)
 	slot_poc2 = list(/obj/item/device/pda2/clown)
 	slot_lhan = list(/obj/item/instrument/bikehorn)
 
+	faction = FACTION_CLOWN
+
 	New()
 		..()
 		src.access = get_access("Clown")
@@ -1800,6 +1843,8 @@ ABSTRACT_TYPE(/datum/job/special/halloween)
 		..()
 		if (!M)
 			return
+
+		M.traitHolder.addTrait("training_clown")
 		M.bioHolder.AddEffect("regenerator", magical=1)
 
 /datum/job/special/halloween/candy_salesman
@@ -1902,7 +1947,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween)
 	wages = PAY_UNTRAINED
 	limit = 1
 	change_name_on_spawn = 1
-	slot_mask = list(/obj/item/clothing/head/werewolf)
+	slot_head = list(/obj/item/clothing/head/werewolf)
 	slot_jump = list(/obj/item/clothing/under/shorts)
 	slot_suit = list(/obj/item/clothing/suit/gimmick/werewolf)
 	slot_ears = list(/obj/item/device/radio/headset)
@@ -2038,7 +2083,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween)
 	slot_belt = list(/obj/item/device/pda2)
 	slot_poc1 = list(/obj/item/magnifying_glass)
 	slot_poc2 = list(/obj/item/shaker/salt)
-	items_in_backpack = list(/obj/item/device/camera_viewer, /obj/item/device/audio_log, /obj/item/gun/energy/ghost)
+	items_in_backpack = list(/obj/item/device/camera_viewer/security, /obj/item/device/audio_log, /obj/item/gun/energy/ghost)
 	alt_names = list("Paranormal Activities Investigator", "Spooks Specialist")
 	change_name_on_spawn = 1
 
@@ -2077,7 +2122,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween)
 	wages = PAY_TRADESMAN
 	limit = 1
 	change_name_on_spawn = 1
-	slot_jump = list(/obj/item/clothing/under/trash_bag)
+	slot_jump = list(/obj/item/clothing/under/gimmick/trashsinglet)
 	slot_foot = list(/obj/item/clothing/shoes/sandal)
 	slot_belt = list(/obj/item/device/pda2)
 	slot_back = list(/obj/item/storage/backpack/satchel/anello)
@@ -2165,6 +2210,37 @@ ABSTRACT_TYPE(/datum/job/special/halloween)
 		be.altered = 1
 		M?.mind?.miranda = "Evildoer! You have been apprehended by a hero of space justice!"
 
+/datum/job/special/halloween/pickle
+	name = "Pickle"
+	wages = PAY_DUMBCLOWN
+	limit = 1
+	change_name_on_spawn = 1
+	slot_ears = list(/obj/item/device/radio/headset)
+	slot_suit = list(/obj/item/clothing/suit/gimmick/pickle)
+	slot_jump = list(/obj/item/clothing/under/color/green)
+	slot_belt = list(/obj/item/device/pda2)
+	slot_foot = list(/obj/item/clothing/shoes/black)
+
+	New()
+		..()
+		src.access = get_access("Staff Assistant")
+		return
+
+	special_setup(var/mob/living/carbon/human/M)
+		..()
+		if (!M)
+			return
+		var/obj/item/trinket = M.trinket?.deref()
+		trinket?.setMaterial(getMaterial("pickle"))
+		for (var/i in 1 to 3)
+			var/type = pick(trinket_safelist)
+			var/obj/item/pickle = new type(M.loc)
+			pickle.setMaterial(getMaterial("pickle"))
+			M.equip_if_possible(pickle, SLOT_IN_BACKPACK)
+		M.bioHolder.RemoveEffect("midas") //just in case mildly mutated has given us midas I guess?
+		M.bioHolder.AddEffect("pickle", magical=TRUE)
+		M.blood_id = "juice_pickle"
+
 ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 /datum/job/special/halloween/critter
 	wages = PAY_DUMBCLOWN
@@ -2173,6 +2249,14 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_ears = list()
 	slot_card = null
 	slot_back = list()
+
+	special_setup(var/mob/living/carbon/human/M)
+		if (!M)
+			return
+
+		..()
+		// Deactivate any gene that was activated by Mildly mutated trait
+		M.bioHolder.DeactivateAllPoolEffects()
 
 /datum/job/special/halloween/critter/plush
 	name = "Plush Toy"
@@ -2241,75 +2325,48 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 		M.critterize(type)
 */
 
-/datum/job/special/syndicate_operative
-	name = "Syndicate Operative"
-	wages = 0
-	limit = 0
-	linkcolor = "#880000"
-	slot_ears = list() // So they don't get a default headset and stuff first.
-	slot_card = null
-	slot_glov = list()
-	slot_foot = list()
-	slot_back = list()
-	slot_belt = list()
-	spawn_id = 0
-	radio_announcement = FALSE
-	special_spawn_location = LANDMARK_SYNDICATE
-	var/leader = FALSE
-	add_to_manifest = FALSE
-
-
-	special_setup(var/mob/living/carbon/human/M)
-		..()
-		if (!M)
-			return
-		if (ticker?.mode && istype(ticker.mode, /datum/game_mode/nuclear))
-			M.real_name = "[syndicate_name()] Operative #[ticker.mode:agent_number]"
-			ticker.mode:agent_number++
-		else
-			M.real_name = "Syndicate Operative [M.real_name]"
-
-		antagify(M, ROLE_NUKEOP, do_objectives = FALSE)
-		equip_syndicate(M, leader)
-		return
-
-/datum/job/special/syndicate_operative/leader
-	name = "Syndicate Operative Commander"
-	special_spawn_location = LANDMARK_SYNDICATE_BOSS
-	leader = TRUE
-
 /datum/job/special/syndicate_weak
 	linkcolor = "#880000"
 	name = "Junior Syndicate Operative"
 	limit = 0
 	wages = 0
-	slot_back = list(/obj/item/storage/backpack/satchel)
-	slot_belt = list()
+	slot_back = list(/obj/item/storage/backpack/syndie)
+	slot_belt = list(/obj/item/gun/kinetic/pistol)
 	slot_jump = list(/obj/item/clothing/under/misc/syndicate)
-	slot_suit = list(/obj/item/clothing/suit/armor/vest)
-	slot_head = list(/obj/item/clothing/head/helmet/swat)
-	slot_foot = list(/obj/item/clothing/shoes/swat)
+	slot_suit = list()
+	slot_head = list()
+	slot_foot = list(/obj/item/clothing/shoes/swat/noslip)
+	slot_glov = list(/obj/item/clothing/gloves/swat)
+	slot_eyes = list(/obj/item/clothing/glasses/sunglasses)
 	slot_ears = list()
-	slot_mask = list(/obj/item/clothing/mask/breath)
-	slot_card = null		///obj/item/card/id/
-	slot_poc1 = list(/obj/item/reagent_containers/pill/tox)
+	slot_mask = list(/obj/item/clothing/mask/gas/swat/syndicate)
+	slot_card = null		///obj/item/card/id
+	slot_poc1 = list(/obj/item/tank/emergency_oxygen/extended)
 	slot_poc2 = list(/obj/item/storage/pouch/bullet_9mm)
 	slot_lhan = list()
-	slot_rhan = list(/obj/item/gun/kinetic/pistol)
+	slot_rhan = list()
+	items_in_backpack = list(
+		/obj/item/clothing/head/helmet/space/syndicate,
+		/obj/item/clothing/suit/space/syndicate)
+
+	faction = FACTION_SYNDICATE
+	radio_announcement = FALSE
 	add_to_manifest = FALSE
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
-		antagify(M, "Syndicate Agent", 0)
+		M.mind?.add_generic_antagonist(ROLE_SYNDICATE_AGENT, "Junior Syndicate Operative", source = ANTAGONIST_SOURCE_ADMIN)
 
 /datum/job/special/syndicate_weak/no_ammo
 	name = "Poorly Equipped Junior Syndicate Operative"
 	slot_poc2 = list()
-	slot_poc1 = list()
+
+	faction = FACTION_SYNDICATE
+
 // hidden jobs for nt-so vs syndicate spec-ops
 
 /datum/job/special/syndicate_specialist
-	linkcolor = "#C70039"
+	linkcolor = "#880000"
 	name = "Syndicate Special Operative"
 	limit = 0
 	wages = 0
@@ -2317,23 +2374,28 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	allow_spy_theft = 0
 	cant_spawn_as_rev = 1
 	receives_implant = /obj/item/implant/revenge/microbomb
-	slot_back = list(/obj/item/storage/backpack/satchel)
-	slot_belt = list(/obj/item/gun/kinetic/pistol)
+	slot_back = list(/obj/item/storage/backpack/syndie)
+	slot_belt = list(/obj/item/storage/belt/gun/pistol)
 	slot_jump = list(/obj/item/clothing/under/misc/syndicate)
 	slot_suit = list(/obj/item/clothing/suit/space/syndicate/specialist)
 	slot_head = list(/obj/item/clothing/head/helmet/space/syndicate/specialist)
-	slot_foot = list(/obj/item/clothing/shoes/swat)
-	slot_ears = list( /obj/item/device/radio/headset/syndicate) //needs their own secret channel
-	slot_mask = list(/obj/item/clothing/mask/breath)
-	slot_card = /obj/item/card/id/
-	slot_poc1 = list(/obj/item/storage/pouch/assault_rifle)
-	slot_poc2 = list(/obj/item/storage/pouch/bullet_9mm)
-	slot_lhan = list(/obj/item/remote/syndicate_teleporter)
-	slot_rhan = list(/obj/item/tank/jetpack)
+	slot_foot = list(/obj/item/clothing/shoes/swat/noslip)
+	slot_glov = list(/obj/item/clothing/gloves/swat)
+	slot_eyes = list(/obj/item/clothing/glasses/sunglasses)
+	slot_ears = list(/obj/item/device/radio/headset/syndicate) //needs their own secret channel
+	slot_mask = list(/obj/item/clothing/mask/gas/swat/syndicate)
+	slot_card = /obj/item/card/id
+	slot_poc1 = list(/obj/item/tank/emergency_oxygen/extended)
+	slot_poc2 = list(/obj/item/storage/pouch/assault_rifle)
+	slot_lhan = list()
+	slot_rhan = list(/obj/item/tank/jetpack/syndicate)
 	items_in_backpack = list(/obj/item/gun/kinetic/assault_rifle,
-							/obj/item/device/pda2,
 							/obj/item/old_grenade/stinger/frag,
-							/obj/item/breaching_charge)
+							/obj/item/breaching_charge,
+							/obj/item/remote/syndicate_teleporter)
+
+	faction = FACTION_SYNDICATE
+	radio_announcement = FALSE
 	add_to_manifest = FALSE
 	special_spawn_location = LANDMARK_SYNDICATE
 
@@ -2345,8 +2407,55 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 		..()
 		if (!M)
 			return
-		antagify(M, "Syndicate Agent", 0)
+		M.mind?.add_generic_antagonist(ROLE_SYNDICATE_AGENT, "Syndicate Special Operative", source = ANTAGONIST_SOURCE_ADMIN)
 		M.show_text("<b>The assault has begun! Head over to the station and kill any and all Nanotrasen personnel you encounter!</b>", "red")
+
+/datum/job/special/pirate
+	linkcolor = "#880000"
+	name = "Space Pirate"
+	limit = 0
+	wages = 0
+	add_to_manifest = FALSE
+	radio_announcement = FALSE
+	allow_traitors = FALSE
+	allow_spy_theft = FALSE
+	cant_spawn_as_rev = TRUE
+	slot_card = /obj/item/card/id
+	slot_belt = list()
+	slot_back = list()
+	slot_jump = list()
+	slot_foot = list()
+	slot_head = list()
+	slot_eyes = list()
+	slot_ears = list()
+	slot_poc1 = list()
+	slot_poc2 = list()
+	var/rank = ROLE_PIRATE
+
+	New()
+		..()
+		src.access = list(access_maint_tunnels, access_pirate )
+		return
+
+	special_setup(var/mob/living/carbon/human/M)
+		..()
+		if (!M)
+			return
+
+		for (var/datum/antagonist/antag in M.mind.antagonists)
+			if (antag.id == ROLE_PIRATE || antag.id == ROLE_PIRATE_FIRST_MATE || antag.id == ROLE_PIRATE_CAPTAIN)
+				antag.give_equipment()
+				return
+		M.mind.add_antagonist(rank, source = ANTAGONIST_SOURCE_ADMIN)
+
+
+	first_mate
+		name = "Space Pirate First Mate"
+		rank = ROLE_PIRATE_FIRST_MATE
+
+	captain
+		name = "Space Pirate Captain"
+		rank = ROLE_PIRATE_CAPTAIN
 
 /datum/job/special/juicer_specialist
 	linkcolor = "#cc8899"
@@ -2369,6 +2478,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	wages = PAY_IMPORTANT
 	allow_traitors = 0
 	allow_spy_theft = 0
+	can_join_gangs = FALSE
 	cant_spawn_as_rev = 1
 	receives_badge = 1
 	receives_miranda = 1
@@ -2383,16 +2493,18 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_eyes = list(/obj/item/clothing/glasses/nightvision/sechud/flashblocking)
 	slot_ears = list(/obj/item/device/radio/headset/command/nt) //needs their own secret channel
 	slot_mask = list(/obj/item/clothing/mask/gas/NTSO)
-	slot_card = /obj/item/card/id/command
+	slot_card = /obj/item/card/id/nt_specialist
 	slot_poc1 = list(/obj/item/device/pda2/heads)
 	slot_poc2 = list(/obj/item/storage/ntsc_pouch/ntso)
 	items_in_backpack = list(/obj/item/storage/firstaid/regular,
 							/obj/item/clothing/head/NTberet,
-							/obj/item/spacecash/fivehundred)
+							/obj/item/currency/spacecash/fivehundred)
+
+	faction = FACTION_NANOTRASEN
 
 	New()
 		..()
-		src.access = get_all_accesses()
+		src.access = get_all_accesses() + access_centcom
 		return
 
 	special_setup(var/mob/living/carbon/human/M)
@@ -2403,7 +2515,83 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 		// M.show_text("<b>Hostile assault force incoming! Defend the crew from the attacking Syndicate Special Operatives!</b>", "blue")
 
 
-// Use this one for late respawns to dael with existing antags. they are weaker cause they dont get a laser rifle or frags
+/datum/job/special/nt_engineer
+	linkcolor = "#3348ff"
+	name = "Nanotrasen Emergency Repair Technician"
+	limit = 0
+	wages = PAY_IMPORTANT
+	allow_traitors = 0
+	allow_spy_theft = 0
+	cant_spawn_as_rev = 1
+	slot_back = list(/obj/item/storage/backpack/NT)
+	slot_belt = list(/obj/item/storage/belt/utility/nt_engineer)
+	slot_jump = list(/obj/item/clothing/under/rank/engineer)
+	slot_suit = list(/obj/item/clothing/suit/space/industrial/nt_specialist)
+	slot_head = list(/obj/item/clothing/head/helmet/space/ntso)
+	slot_foot = list(/obj/item/clothing/shoes/magnetic)
+	slot_glov = list(/obj/item/clothing/gloves/yellow)
+	slot_eyes = list(/obj/item/clothing/glasses/toggleable/meson)
+	slot_ears = list(/obj/item/device/radio/headset/command/nt) //needs their own secret channel
+	slot_mask = list(/obj/item/clothing/mask/gas/NTSO)
+	slot_card = /obj/item/card/id/nt_specialist
+	slot_poc1 = list(/obj/item/tank/emergency_oxygen/extended)
+	items_in_backpack = list(/obj/item/storage/firstaid/regular,
+							/obj/item/device/flash,
+							/obj/item/sheet/steel/fullstack,
+							/obj/item/sheet/glass/reinforced/fullstack)
+
+	faction = FACTION_NANOTRASEN
+
+	New()
+		..()
+		src.access = get_all_accesses() + access_centcom
+
+	special_setup(var/mob/living/carbon/human/M)
+		..()
+		M?.traitHolder.addTrait("training_engineer")
+		SPAWN(1)
+			var/obj/item/rcd/rcd = locate() in M.belt.storage.stored_items
+			rcd.matter = 100
+			rcd.max_matter = 100
+			rcd.tooltip_rebuild = TRUE
+			rcd.UpdateIcon()
+
+/datum/job/special/nt_medical
+	linkcolor = "#3348ff"
+	name = "Nanotrasen Emergency Medic"
+	limit = 0
+	wages = PAY_IMPORTANT
+	allow_traitors = 0
+	allow_spy_theft = 0
+	cant_spawn_as_rev = 1
+	slot_back = list(/obj/item/storage/backpack/NT)
+	slot_belt = list(/obj/item/storage/belt/medical/prepared)
+	slot_jump = list(/obj/item/clothing/under/rank/medical)
+	slot_suit = list(/obj/item/clothing/suit/hazard/paramedic/armored)
+	slot_head = list(/obj/item/clothing/head/helmet/space/ntso)
+	slot_foot = list(/obj/item/clothing/shoes/brown)
+	slot_glov = list(/obj/item/clothing/gloves/latex)
+	slot_eyes = list(/obj/item/clothing/glasses/healthgoggles/upgraded)
+	slot_ears = list(/obj/item/device/radio/headset/command/nt) //needs their own secret channel
+	slot_mask = list(/obj/item/clothing/mask/gas/NTSO)
+	slot_card = /obj/item/card/id/nt_specialist
+	slot_poc1 = list(/obj/item/tank/emergency_oxygen/extended)
+	items_in_backpack = list(/obj/item/storage/firstaid/regular,
+							/obj/item/device/flash,
+							/obj/item/reagent_containers/glass/bottle/omnizine,
+							/obj/item/reagent_containers/glass/bottle/ether)
+
+	faction = FACTION_NANOTRASEN
+
+	New()
+		..()
+		src.access = get_all_accesses() + access_centcom
+
+	special_setup(var/mob/living/carbon/human/M)
+		..()
+		M?.traitHolder.addTrait("training_medical")
+
+// Use this one for late respawns to deal with existing antags. they are weaker cause they dont get a laser rifle or frags
 /datum/job/special/nt_security
 	linkcolor = "#3348ff"
 	name = "Nanotrasen Security Consultant"
@@ -2413,10 +2601,11 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	requires_supervisor_job = "Head of Security"
 	allow_traitors = 0
 	allow_spy_theft = 0
+	can_join_gangs = FALSE
 	cant_spawn_as_rev = 1
 	receives_badge = 1
 	receives_miranda = 1
-	receives_implant = /obj/item/implant/health/security
+	receives_implant = /obj/item/implant/health/security/anti_mindhack
 	slot_back = list(/obj/item/storage/backpack/NT)
 	slot_belt = list(/obj/item/storage/belt/security/ntsc) //special secbelt subtype that spawns with the NTSO gear inside
 	slot_jump = list(/obj/item/clothing/under/misc/turds)
@@ -2424,14 +2613,17 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_foot = list(/obj/item/clothing/shoes/swat)
 	slot_glov = list(/obj/item/clothing/gloves/swat/NT)
 	slot_eyes = list(/obj/item/clothing/glasses/sunglasses/sechud)
-	slot_ears = list(/obj/item/device/radio/headset/command/nt) //needs their own secret channel
-	slot_card = /obj/item/card/id/command
+	slot_ears = list(/obj/item/device/radio/headset/command/nt/consultant) //needs their own secret channel
+	slot_card = /obj/item/card/id/nt_specialist
 	slot_poc1 = list(/obj/item/device/pda2/ntso)
-	slot_poc2 = list(/obj/item/spacecash/fivehundred)
+	slot_poc2 = list(/obj/item/currency/spacecash/fivehundred)
 	items_in_backpack = list(/obj/item/storage/firstaid/regular,
 							/obj/item/clothing/head/helmet/space/ntso,
 							/obj/item/clothing/suit/space/ntso,
 							/obj/item/cloth/handkerchief/nt)
+	wiki_link = "https://wiki.ss13.co/Nanotrasen_Security_Consultant"
+
+	faction = FACTION_NANOTRASEN
 
 	New()
 		..()
@@ -2468,7 +2660,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 		..()
 		if (!M)
 			return
-		M.bioHolder.AddEffect("training_miner")
+		M.traitHolder.addTrait("training_miner")
 
 /datum/job/special/machoman
 	name = "Macho Man"
@@ -2478,12 +2670,13 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_card = null
 	slot_back = list()
 	items_in_backpack = list()
+	wiki_link = "https://wiki.ss13.co/Admin#Special_antagonists"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
 		if (!M)
 			return
-		M.machoize()
+		M.mind?.add_antagonist(ROLE_MACHO_MAN, source = ANTAGONIST_SOURCE_ADMIN)
 
 /datum/job/special/meatcube
 	name = "Meatcube"
@@ -2495,50 +2688,13 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_back = list()
 	items_in_backpack = list()
 	add_to_manifest = FALSE
+	wiki_link = "https://wiki.ss13.co/Critter#Other"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
 		if (!M)
 			return
 		M.cubeize(INFINITY)
-
-/datum/job/special/AI
-	name = "AI"
-	linkcolor = "#999999"
-	limit = 0
-	wages = 0
-	allow_traitors = 0
-	cant_spawn_as_rev = 1
-	slot_ears = list()
-	slot_card = null
-	slot_back = list()
-	slot_belt = list()
-	items_in_backpack = list()
-
-	special_setup(var/mob/living/carbon/human/M)
-		..()
-		if (!M)
-			return
-		return M.AIize()
-
-/datum/job/special/cyborg
-	name = "Cyborg"
-	linkcolor = "#999999"
-	limit = 0
-	wages = 0
-	allow_traitors = 0
-	cant_spawn_as_rev = 1
-	slot_ears = list()
-	slot_card = null
-	slot_back = list()
-	slot_belt = list()
-	items_in_backpack = list()
-
-	special_setup(var/mob/living/carbon/human/M)
-		..()
-		if (!M)
-			return
-		return M.Robotize_MK2()
 
 /datum/job/special/ghostdrone
 	name = "Drone"
@@ -2550,6 +2706,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_card = null
 	slot_back = list()
 	items_in_backpack = list()
+	wiki_link = "https://wiki.ss13.co/Ghostdrone"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -2558,8 +2715,9 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 		droneize(M, 0)
 
 /datum/job/daily //Special daily jobs
-
-/datum/job/daily/sunday
+	var/day = ""
+/datum/job/daily/boxer
+	day = "Sunday"
 	name = "Boxer"
 	wages = PAY_UNTRAINED
 	limit = 4
@@ -2567,41 +2725,37 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_glov = list(/obj/item/clothing/gloves/boxing)
 	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Boxer"
 
 	New()
 		..()
 		src.access = get_access("Boxer")
 		return
 
-/datum/job/daily/monday
-	name = "Mime"
+/datum/job/daily/dungeoneer
+	day = "Monday"
+	name = "Dungeoneer"
 	limit = 1
-	wages = PAY_DUMBCLOWN*2
+	wages = PAY_UNTRAINED
 	slot_belt = list(/obj/item/device/pda2)
-	slot_head = list(/obj/item/clothing/head/mime_bowler)
-	slot_mask = list(/obj/item/clothing/mask/mime)
-	slot_jump = list(/obj/item/clothing/under/misc/mime/alt)
-	slot_suit = list(/obj/item/clothing/suit/scarf)
-	slot_glov = list(/obj/item/clothing/gloves/latex)
-	slot_foot = list(/obj/item/clothing/shoes/black)
-	slot_poc1 = list(/obj/item/pen/crayon/white)
+	slot_mask = list(/obj/item/clothing/mask/skull)
+	slot_jump = list(/obj/item/clothing/under/color/brown)
+	slot_suit = list(/obj/item/clothing/suit/cultist/nerd)
+	slot_glov = list(/obj/item/clothing/gloves/black)
+	slot_foot = list(/obj/item/clothing/shoes/brown)
+	slot_poc1 = list(/obj/item/pen/omni)
 	slot_poc2 = list(/obj/item/paper)
-	items_in_backpack = list(/obj/item/baguette)
+	items_in_backpack = list(/obj/item/storage/box/nerd_kit)
 	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Jobs#Job_of_the_Day" // no wiki page yet
 
 	New()
 		..()
-		src.access = get_access("Mime")
+		src.access = get_access("Dungeoneer")
 		return
 
-	special_setup(var/mob/living/carbon/human/M)
-		..()
-		if (!M)
-			return
-		M.bioHolder.AddEffect("mute", magical=1)
-		M.bioHolder.AddEffect("blankman", magical=1)
-
-/datum/job/daily/tuesday
+/datum/job/daily/barber
+	day = "Tuesday"
 	name = "Barber"
 	wages = PAY_UNTRAINED
 	limit = 1
@@ -2610,14 +2764,17 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_poc1 = list(/obj/item/scissors)
 	slot_poc2 = list(/obj/item/razor_blade)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	wiki_link = "https://wiki.ss13.co/Barber"
 
 	New()
 		..()
 		src.access = get_access("Barber")
 		return
 
-/datum/job/daily/wednesday
-	name = "Mailman"
+/datum/job/daily/mail_courier
+	day = "Wednesday"
+	name = "Mail Courier"
+	alias_names = "Mailman"
 	wages = PAY_TRADESMAN
 	limit = 2
 	slot_jump = list(/obj/item/clothing/under/misc/mail/syndicate)
@@ -2626,14 +2783,16 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_back = list(/obj/item/storage/backpack/satchel)
 	slot_ears = list(/obj/item/device/radio/headset/mail)
 	items_in_backpack = list(/obj/item/wrapping_paper, /obj/item/paper_bin, /obj/item/scissors, /obj/item/stamp)
-	alt_names = list("Head of Deliverying", "Head of Mailmanning")
+	alt_names = list("Head of Deliverying", "Mail Bringer")
+	wiki_link = "https://wiki.ss13.co/Mailman"
 
 	New()
 		..()
-		src.access = get_access("Mailman")
+		src.access = get_access("Mail Courier")
 		return
 
-/datum/job/daily/thursday
+/datum/job/daily/lawyer
+	day = "Thursday"
 	name = "Lawyer"
 	linkcolor = "#FF0000"
 	wages = PAY_DOCTORATE
@@ -2643,6 +2802,7 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_foot = list(/obj/item/clothing/shoes/black)
 	slot_lhan = list(/obj/item/storage/briefcase)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
+	wiki_link = "https://wiki.ss13.co/Lawyer"
 
 	New()
 		..()
@@ -2650,7 +2810,8 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 		return
 
 
-/datum/job/daily/friday
+/datum/job/daily/tourist
+	day = "Friday"
 	name = "Tourist"
 	limit = 100
 	wages = 0
@@ -2659,21 +2820,28 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_belt = list(/obj/item/storage/fanny)
 	slot_jump = list(/obj/item/clothing/under/misc/tourist)
 	slot_poc1 = list(/obj/item/camera_film)
-	slot_poc2 = list(/obj/item/spacecash/random/tourist) // Exact amount is randomized.
+	slot_poc2 = list(/obj/item/currency/spacecash/tourist) // Exact amount is randomized.
 	slot_foot = list(/obj/item/clothing/shoes/tourist)
 	slot_lhan = list(/obj/item/camera)
 	slot_rhan = list(/obj/item/storage/photo_album)
 	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Tourist"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
 		if (!M)
 			return
 		if(prob(33))
-			var/morph = pick(/datum/mutantrace/lizard,/datum/mutantrace/skeleton,/datum/mutantrace/ithillid,/datum/mutantrace/martian,/datum/mutantrace/amphibian)
+			var/morph = pick(/datum/mutantrace/lizard,/datum/mutantrace/skeleton,/datum/mutantrace/ithillid,/datum/mutantrace/martian,/datum/mutantrace/amphibian,/datum/mutantrace/blob,/datum/mutantrace/cow)
 			M.set_mutantrace(morph)
+		var/obj/item/clothing/lanyard/L = new /obj/item/clothing/lanyard(M.loc)
+		M.equip_if_possible(L, SLOT_WEAR_ID, FALSE)
+		var/obj/item/card/id = locate() in M
+		if (id)
+			L.storage.add_contents(id, M, FALSE)
 
-/datum/job/daily/saturday
+/datum/job/daily/musician
+	day = "Saturday"
 	name = "Musician"
 	limit = 3
 	wages = PAY_UNTRAINED
@@ -2682,10 +2850,13 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_foot = list(/obj/item/clothing/shoes/brown)
 	slot_ears = list(/obj/item/device/radio/headset/civilian)
 	items_in_backpack = list(/obj/item/instrument/saxophone,/obj/item/instrument/guitar,/obj/item/instrument/bagpipe,/obj/item/instrument/fiddle)
+	change_name_on_spawn = 1
+	wiki_link = "https://wiki.ss13.co/Musician"
 
 /datum/job/battler
 	name = "Battler"
 	limit = -1
+	wiki_link = "https://wiki.ss13.co/Battler"
 
 /datum/job/slasher
 	name = "The Slasher"
@@ -2695,12 +2866,13 @@ ABSTRACT_TYPE(/datum/job/special/halloween/critter)
 	slot_card = null
 	slot_back = list()
 	items_in_backpack = list()
+	wiki_link = "https://wiki.ss13.co/The_Slasher"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
 		if (!M)
 			return
-		M.slasherize()
+		M.mind?.add_antagonist(ROLE_SLASHER, source = ANTAGONIST_SOURCE_ADMIN)
 
 ABSTRACT_TYPE(/datum/job/special/pod_wars)
 /datum/job/special/pod_wars
@@ -2713,6 +2885,8 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 	allow_traitors = 0
 	cant_spawn_as_rev = 1
 	var/team = 0 //1 = NT, 2 = SY
+	var/overlay_icon
+	wiki_link = "https://wiki.ss13.co/Game_Modes#Pod_Wars"
 
 	special_setup(var/mob/living/carbon/human/M)
 		..()
@@ -2729,6 +2903,7 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 		//stuff for headsets
 		if (istype(ticker.mode, /datum/game_mode/pod_wars))
 			var/datum/game_mode/pod_wars/mode = ticker.mode
+			mode.setup_team_overlay(M.mind, overlay_icon)
 			if (team == 1)
 				M.mind.special_role = mode.team_NT?.name
 				setup_headset(M.ears, mode.team_NT?.comms_frequency)
@@ -2751,7 +2926,11 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 		cant_allocate_unwanted = 1
 		access = list(access_heads, access_medical, access_medical_lockers)
 		team = 1
+		overlay_icon = "nanotrasen"
 
+		faction = FACTION_NANOTRASEN
+
+		receives_implant = /obj/item/implant/pod_wars/nanotrasen
 		slot_back = list(/obj/item/storage/backpack/NT)
 		slot_belt = list(/obj/item/gun/energy/blaster_pod_wars/nanotrasen)
 		slot_jump = list(/obj/item/clothing/under/misc/turds)
@@ -2764,7 +2943,7 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 		slot_glov = list(/obj/item/clothing/gloves/swat/NT)
 		slot_poc1 = list(/obj/item/tank/emergency_oxygen/extended)
 		slot_poc2 = list(/obj/item/device/pda2/pod_wars/nanotrasen)
-		items_in_backpack = list(/obj/item/survival_machete, /obj/item/spacecash/hundred)
+		items_in_backpack = list(/obj/item/survival_machete, /obj/item/currency/spacecash/hundred)
 
 		commander
 			name = "NanoTrasen Commander"
@@ -2776,6 +2955,7 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 			no_jobban_from_this_job = 0
 			high_priority_job = 1
 			cant_allocate_unwanted = 1
+			overlay_icon = "nanocomm"
 			access = list(access_heads, access_captain, access_medical, access_medical_lockers, access_engineering_power)
 
 			slot_head = list(/obj/item/clothing/head/NTberet/commander)
@@ -2791,8 +2971,12 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 		cant_allocate_unwanted = 1
 		access = list(access_syndicate_shuttle, access_medical, access_medical_lockers)
 		team = 2
+		overlay_icon = "syndicate"
 		add_to_manifest = FALSE
 
+		faction = FACTION_SYNDICATE
+
+		receives_implant = /obj/item/implant/pod_wars/syndicate
 		slot_back = list(/obj/item/storage/backpack/syndie)
 		slot_belt = list(/obj/item/gun/energy/blaster_pod_wars/syndicate)
 		slot_jump = list(/obj/item/clothing/under/misc/syndicate)
@@ -2805,7 +2989,7 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 		slot_glov = list(/obj/item/clothing/gloves/swat)
 		slot_poc1 = list(/obj/item/tank/emergency_oxygen/extended)
 		slot_poc2 = list(/obj/item/device/pda2/pod_wars/syndicate)
-		items_in_backpack = list(/obj/item/survival_machete/syndicate, /obj/item/spacecash/hundred)
+		items_in_backpack = list(/obj/item/survival_machete/syndicate, /obj/item/currency/spacecash/hundred)
 
 		commander
 			name = "Syndicate Commander"
@@ -2817,6 +3001,7 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 			no_jobban_from_this_job = 0
 			high_priority_job = 1
 			cant_allocate_unwanted = 1
+			overlay_icon = "syndcomm"
 			access = list(access_syndicate_shuttle, access_syndicate_commander, access_medical, access_medical_lockers, access_engineering_power)
 
 			slot_head = list(/obj/item/clothing/head/helmet/space/syndicate/commissar_cap)
@@ -2827,6 +3012,7 @@ ABSTRACT_TYPE(/datum/job/special/pod_wars)
 /datum/job/football
 	name = "Football Player"
 	limit = -1
+	wiki_link = "https://wiki.ss13.co/Game_Modes#Football"
 
 /*---------------------------------------------------------------*/
 

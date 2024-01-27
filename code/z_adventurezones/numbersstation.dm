@@ -222,7 +222,7 @@ Nanotrasen, Inc.<br>
 	configure_mode = 0
 	random_code = 1
 	spawn_contents = list(/obj/item/paper/requisitionF49B,
-	/obj/item/spacecash/thousand, /obj/item/spacecash/thousand, /obj/item/reagent_containers/food/drinks/bottle/fancy_beer)
+	/obj/item/currency/spacecash/thousand, /obj/item/currency/spacecash/thousand, /obj/item/reagent_containers/food/drinks/bottle/fancy_beer)
 
 /obj/item/storage/secure/ssafe/pilot_cargo3
 	name = "pilot's lockbox"
@@ -264,7 +264,7 @@ Nanotrasen, Inc.<br>
 			for (var/obj/item/device/radio/Hs in H)
 				if (Hs.frequency == frequency)
 					listeners += H
-					boutput(H, "<span class='notice'>A peculiar noise intrudes upon the radio frequency of your [Hs.name].</span>")
+					boutput(H, SPAN_NOTICE("A peculiar noise intrudes upon the radio frequency of your [Hs.name]."))
 				break
 		for (var/mob/living/silicon/robot/R in mobs)
 			LAGCHECK(LAG_LOW)
@@ -272,7 +272,7 @@ Nanotrasen, Inc.<br>
 				var/obj/item/device/radio/Hs = R.radio
 				if (Hs.frequency == frequency)
 					listeners += R
-					boutput(R, "<span class='notice'>A peculiar noise intrudes upon your radio frequency.</span>")
+					boutput(R, SPAN_NOTICE("A peculiar noise intrudes upon your radio frequency."))
 
 	proc/play_all_numbers()
 		var/batch = 0
@@ -312,7 +312,7 @@ Nanotrasen, Inc.<br>
 	proc/broadcast_sound(var/soundfile)
 		for (var/mob/M in listeners)
 			if (M.client)
-				M << sound(soundfile, volume = 100, channel = sound_channel, wait = 1)
+				M.playsound_local_not_inworld(soundfile, vol=50, wait=TRUE)
 
 	proc/get_tens(var/n)
 		if (n >= 20)
@@ -417,7 +417,7 @@ var/global/datum/numbers_station/lincolnshire = new
 		if (TP == null)
 			return 1
 		var/list/nums = splittext(TP, " ")
-		if (nums.len < 21)
+		if (length(nums) < 21)
 			logTheThing(LOG_DEBUG, null, "<b>Numbers station</b> got too few numbers.")
 			return 2
 		for (var/i = 1, i <= 21, i++)

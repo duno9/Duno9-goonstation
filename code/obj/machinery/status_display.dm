@@ -9,6 +9,10 @@
 // // Alert status
 // // And arbitrary messages set by comms computer
 
+/obj/status_display_proxy
+	plane = PLANE_NOSHADOW_ABOVE
+	mouse_opacity = FALSE
+
 #define MAX_LEN 5
 TYPEINFO(/obj/machinery/status_display)
 	mats = 14
@@ -17,10 +21,11 @@ TYPEINFO(/obj/machinery/status_display)
 	icon = 'icons/obj/status_display.dmi'
 	icon_state = "frame"
 	name = "status display"
-	anchored = 1
+	anchored = ANCHORED
 	density = 0
 	plane = PLANE_NOSHADOW_ABOVE
 	deconstruct_flags = DECON_SCREWDRIVER | DECON_WRENCH | DECON_CROWBAR | DECON_WELDER | DECON_MULTITOOL
+	power_usage = 200
 	var/glow_in_dark_screen = TRUE
 	var/image/screen_image
 
@@ -54,7 +59,7 @@ TYPEINFO(/obj/machinery/status_display)
 	var/obj/machinery/nuclearbomb/the_bomb = null
 
 	/// Proxy object for putting map text on top of overlays
-	var/obj/proxy = null
+	var/obj/status_display_proxy/proxy = null
 
 	var/image/crt_image = null
 
@@ -64,13 +69,12 @@ TYPEINFO(/obj/machinery/status_display)
 		..()
 		src.proxy = new
 		src.layer -= 0.3
-		proxy.plane = PLANE_NOSHADOW_ABOVE
 		proxy.layer = src.layer + 0.1
 		src.vis_contents += proxy
 		crt_image = SafeGetOverlayImage("crt", src.icon, "crt")
 		crt_image.layer = src.layer + 0.2
 		crt_image.plane = PLANE_DEFAULT
-		crt_image.appearance_flags = NO_CLIENT_COLOR | RESET_ALPHA | KEEP_APART
+		crt_image.appearance_flags = NO_CLIENT_COLOR | RESET_ALPHA | KEEP_APART | PIXEL_SCALE
 		crt_image.alpha = 255
 		crt_image.mouse_opacity = 0
 		UpdateOverlays(crt_image, "crt")
@@ -101,21 +105,24 @@ TYPEINFO(/obj/machinery/status_display)
 		qdel(src.proxy)
 		src.proxy = null
 		. = ..()
-		
+
 
 	// timed process
 	process()
 		if(status & NOPOWER)
+			maptext = ""
 			ClearAllOverlays()
 			return
 
-		use_power(200)
+		..()
 
 		update()
 
 
 	// set what is displayed
 	proc/update()
+		if(QDELETED(src))
+			return
 
 		switch(mode)
 			if(0)
@@ -143,6 +150,8 @@ TYPEINFO(/obj/machinery/status_display)
 							var/iterations = round(delay/5)
 							for(var/i in 1 to iterations)
 								if(mode != 1 || repeat_update) // kill early if message or mode changed
+									break
+								if(QDELETED(src))
 									break
 								update()
 								if(i != iterations)
@@ -188,14 +197,17 @@ TYPEINFO(/obj/machinery/status_display)
 				update_display_lines(line1,line2)
 
 			if(7) // Nuclear Operative Bomb Armed!
-				if(isnull(src.the_bomb))
+				if(QDELETED(src.the_bomb))
 					if(ticker.mode.type == /datum/game_mode/nuclear)
 						var/datum/game_mode/nuclear/game_mode = ticker.mode
 						src.the_bomb = game_mode.the_bomb
-					if(isnull(src.the_bomb))
+					if(QDELETED(src.the_bomb))
 						for_by_tcl(nuke, /obj/machinery/nuclearbomb)
 							src.the_bomb = nuke
 							break
+					if(QDELETED(src.the_bomb))
+						src.mode = 1
+						return
 				if (!src.the_bomb?.armed)
 					set_picture("nuclear")
 					return
@@ -363,10 +375,10 @@ TYPEINFO(/obj/machinery/ai_status_display)
 	icon = 'icons/obj/status_display.dmi'
 	icon_state = "ai_frame"
 	name = "\improper AI display"
-	anchored = 1
+	anchored = ANCHORED
 	density = 0
 	deconstruct_flags = DECON_SCREWDRIVER | DECON_WRENCH | DECON_CROWBAR | DECON_WELDER | DECON_MULTITOOL
-
+	power_usage = 200
 	machine_registry_idx = MACHINES_STATUSDISPLAYS
 	var/is_on = FALSE //Distinct from being powered
 
@@ -413,7 +425,7 @@ TYPEINFO(/obj/machinery/ai_status_display)
 			screen_glow.disable()
 			return
 		update()
-		use_power(200)
+		..()
 
 	proc/update()
 		//Update backing colour
@@ -426,18 +438,21 @@ TYPEINFO(/obj/machinery/ai_status_display)
 			screen_glow.set_color(colors[1] / 255, colors[2] / 255, colors[3] / 255)
 
 		//Update expression
-		if (src.emotion != owner.faceEmotion)
-			UpdateOverlays(owner.faceEmotion != "ai-tetris" ? glow_image : null, "glow_img")
-			face_image.icon_state = owner.faceEmotion
+		var/faceEmotion = owner.faceEmotion
+		if (isdead(owner))
+			faceEmotion = "ai_bsod"
+		if (src.emotion != faceEmotion)
+			UpdateOverlays(faceEmotion != "ai_tetris" ? glow_image : null, "glow_img")
+			face_image.icon_state = faceEmotion
 			UpdateOverlays(face_image, "emotion_img")
-			emotion = owner.faceEmotion
+			emotion = faceEmotion
 
 		//Re-enable all the stuff if we are powering on again
 		if (!screen_glow.enabled)
 			screen_glow.enable()
 			UpdateOverlays(face_image, "emotion_img")
 			UpdateOverlays(back_image, "back_img")
-			UpdateOverlays(owner.faceEmotion != "ai-tetris" ? glow_image : null, "glow_img")
+			UpdateOverlays(owner.faceEmotion != "ai_tetris" ? glow_image : null, "glow_img")
 
 		message = owner.status_message
 		name = initial(name) + " ([owner.name])"
@@ -452,7 +467,7 @@ TYPEINFO(/obj/machinery/ai_status_display)
 
 	attack_ai(mob/user as mob) //Captain said it's my turn on the status display
 		if (!isAI(user))
-			boutput(user, "<span class='alert'>Only an AI can claim this.</span>")
+			boutput(user, SPAN_ALERT("Only an AI can claim this."))
 			return
 		var/mob/living/silicon/ai/A = user
 		if (isAIeye(user))
@@ -460,7 +475,7 @@ TYPEINFO(/obj/machinery/ai_status_display)
 			A = AE.mainframe
 		if (owner == A) //no free updates for you
 			return
-		boutput(user, "<span class='notice'>You tune the display to your core.</span>")
+		boutput(user, SPAN_NOTICE("You tune the display to your core."))
 		owner = A
 		is_on = TRUE
 		if (!(status & NOPOWER))

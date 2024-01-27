@@ -116,7 +116,7 @@ ABSTRACT_TYPE(/datum/plant/crop)
 				DNA.mutation = HY_get_mutation_from_path(/datum/plantmutation/synthmeat/pancreas)
 			if("ethanol")
 				DNA.mutation = HY_get_mutation_from_path(/datum/plantmutation/synthmeat/liver)
-			if("urine")
+			if("water")
 				DNA.mutation = HY_get_mutation_from_path(/datum/plantmutation/synthmeat/kidney)
 			if("proconvertin")
 				DNA.mutation = HY_get_mutation_from_path(/datum/plantmutation/synthmeat/spleen)
@@ -191,6 +191,7 @@ ABSTRACT_TYPE(/datum/plant/crop)
 	special_proc = 1 // for dogwood tree
 	vending = 1
 	attacked_proc = 1 // for dogwood tree
+	harvested_proc = 1 // for glowstick tree
 	mutations = list(/datum/plantmutation/tree/money, /datum/plantmutation/tree/rubber,/datum/plantmutation/tree/sassafras, /datum/plantmutation/tree/dog,/datum/plantmutation/tree/paper)
 	commuts = list(/datum/plant_gene_strain/metabolism_fast,/datum/plant_gene_strain/metabolism_slow,/datum/plant_gene_strain/resistance_drought)
 

@@ -32,7 +32,7 @@
 			master.processing_programs.Remove(src)
 			return 1
 
-		if(src.master.processing_programs.len > MAX_BACKGROUND_PROGS) //Don't want too many background programs.
+		if(length(src.master.processing_programs) > MAX_BACKGROUND_PROGS) //Don't want too many background programs.
 			return 1
 
 		if(!(src in src.master.processing_programs))
@@ -474,24 +474,25 @@ file_save - Save file to local disk."}
 				src.print_text("Service mode [src.service_mode ? "" : "de"]activated.")
 
 			if("term_login")
-				var/obj/item/peripheral/scanner = find_peripheral("ID_SCANNER")
-				if(!scanner)
-					src.print_text("Error: No ID scanner detected.")
-					return
 				if(!src.pnet_card)
 					src.print_text("Alert: No network card detected.")
 					return
 				if(!src.serv_id)
 					src.print_text("Alert: Connection required.")
 					return
-				src.ping_wait = 2
 
 				var/datum/computer/file/record/udat = new // what name, assignment, and access do we have??
+				var/obj/item/peripheral/scanner = find_peripheral("ID_SCANNER")
 				if (issilicon(usr) || isAI(usr)) // silicons dont have IDs and we want them to override any inserted ID
 					udat.fields["registered"] = isAI(usr) ? "AIUSR" : "CYBORG" // should probably make all logins use the actual name of the silicon at some point
 					udat.fields["assignment"] = "AI"
 					udat.fields["access"] = "34"
 				else
+					if(!scanner)
+						src.print_text("Error: No ID scanner detected.")
+						return
+				src.ping_wait = 2
+				if(!udat.fields["registered"]) // if a name hasn't been assigned yet (i.e. not a silicon, need to scan id)
 					var/datum/signal/scansignal = src.peripheral_command("scan_card",null,"\ref[scanner]")
 					if (istype(scansignal))
 						udat.fields["registered"] = scansignal.data["registered"]
@@ -913,7 +914,7 @@ file_save - Save file to local disk."}
 				var/key = null
 				var/data = null
 				. = 0
-				if(command_list.len >= 2)
+				if(length(command_list) >= 2)
 
 					key = command_list[1]
 					command_list -= command_list[1]
@@ -926,7 +927,7 @@ file_save - Save file to local disk."}
 					src.print_text("Syntax: \"add \[key] \[data]\"")
 					return
 
-				if(src.working_signal.len >= WORKING_PACKET_MAX)
+				if(length(src.working_signal) >= WORKING_PACKET_MAX)
 					src.print_text("Error: Maximum packet keys reached.")
 					return
 
@@ -1101,7 +1102,7 @@ file_save - Save file to local disk."}
 			if("add") //Add new line to signal if possible.
 				var/title = null
 				var/data = null
-				if(command_list.len >= 2)
+				if(length(command_list) >= 2)
 
 					title = command_list[1]
 					command_list -= command_list[1]
@@ -1114,7 +1115,7 @@ file_save - Save file to local disk."}
 					src.print_half_text("Syntax: \"add \[title] \[data]\"")
 					return
 
-				if(src.working_signal.len >= WORKING_DISPLAY_LENGTH)
+				if(length(src.working_signal) >= WORKING_DISPLAY_LENGTH)
 					src.print_half_text("Error: Working Signal Full.")
 					return
 
@@ -1318,7 +1319,7 @@ file_save - Save file to local disk."}
 				src.holder.root.holder = src
 				src.holder.root.name = "root"
 
-			if(src.text_buffer.len >= 6)
+			if(length(src.text_buffer) >= 6)
 				src.text_buffer -= src.text_buffer[1]
 
 			src.text_buffer += text

@@ -26,10 +26,10 @@
 	G["full_name"] = H.real_name
 	if (H.client && H.client.preferences && length(H.client.preferences.name_middle))
 		var/list/namecheck = splittext(H.real_name, " ")
-		if (namecheck.len >= 2)
+		if (length(namecheck) >= 2)
 			namecheck.Insert(2, H.client.preferences.name_middle)
 			G["full_name"] = jointext(namecheck, " ")
-	G["id"] = "[add_zero(num2hex(rand(1, 1.6777215E7), 0), 6)]"
+	G["id"] = "[add_zero(num2hex(rand(1, 0xffffff), 0), 6)]"
 	M["name"] = G["name"]
 	M["id"] = G["id"]
 	S["name"] = G["name"]
@@ -44,6 +44,8 @@
 		G["sex"] = "Female"
 	else
 		G["sex"] = "Male"
+
+	G["pronouns"] = H.get_pronouns().name
 
 	G["age"] ="[H.bioHolder.age]"
 	G["fingerprint"] = "[H.bioHolder.fingerprints]"
@@ -185,9 +187,9 @@
 		else
 			S["notes"] += " [randomNote]"
 
-		boutput(H, "<span class='notice'>You are currently on the run because you've committed the following crimes:</span>")
-		boutput(H, "<span class='notice'>- [S["mi_crim"]]</span>")
-		boutput(H, "<span class='notice'>- [S["ma_crim"]]</span>")
+		boutput(H, SPAN_NOTICE("You are currently on the run because you've committed the following crimes:"))
+		boutput(H, SPAN_NOTICE("- [S["mi_crim"]]"))
+		boutput(H, SPAN_NOTICE("- [S["ma_crim"]]"))
 
 		H.mind.store_memory("You've committed the following crimes before arriving on the station:")
 		H.mind.store_memory("- [S["mi_crim"]]")

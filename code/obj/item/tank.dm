@@ -44,7 +44,6 @@ Contains:
 	New()
 		..()
 		src.air_contents = new /datum/gas_mixture
-		src.air_contents.vacuum()
 		src.air_contents.volume = 70 //liters
 		src.air_contents.temperature = T20C
 		processing_items |= src
@@ -93,7 +92,7 @@ Contains:
 		return FALSE
 
 	proc/set_release_pressure(pressure)
-		distribute_pressure = clamp(pressure, 0, TANK_MAX_RELEASE_PRESSURE)
+		distribute_pressure = clamp(pressure, 1, TANK_MAX_RELEASE_PRESSURE)
 
 	proc/toggle_valve()
 		if (iscarbon(src.loc))
@@ -108,13 +107,13 @@ Contains:
 				location.internal = null
 				if (location.internals)
 					location.internals.icon_state = "internal0"
-				boutput(location, "<span class='notice'>You close the tank release valve.</span>")
+				boutput(location, SPAN_NOTICE("You close the tank release valve."))
 				return FALSE
 			else
 				if(location.wear_mask && (location.wear_mask.c_flags & MASKINTERNALS))
 					if(!isnull(location.internal)) //you're already using a tank and it's not this one
 						location.internal.toggle_valve()
-						boutput(location, "<span class='notice'>After closing the valve on your other tank, you switch to this one.</span>")
+						boutput(location, SPAN_NOTICE("After closing the valve on your other tank, you switch to this one."))
 					location.internal = src
 
 					for (var/obj/ability_button/tank_valve_toggle/T in location.internal.ability_buttons)
@@ -122,10 +121,10 @@ Contains:
 							T.icon_state = "airon"
 					if (location.internals)
 						location.internals.icon_state = "internal1"
-					boutput(location, "<span class='notice'>You open the tank release valve.</span>")
+					boutput(location, SPAN_NOTICE("You open the tank release valve."))
 					return TRUE
 				else
-					boutput(location, "<span class='alert'>The valve immediately closes! You need to put on a mask first.</span>")
+					boutput(location, SPAN_ALERT("The valve immediately closes! You need to put on a mask first."))
 					playsound(src.loc, 'sound/items/penclick.ogg', 50, TRUE)
 					return FALSE
 
@@ -156,30 +155,33 @@ Contains:
 			air_contents.react()
 			pressure = MIXTURE_PRESSURE(air_contents)
 
-			var/range = (pressure - TANK_FRAGMENT_PRESSURE) / TANK_FRAGMENT_SCALE
+			//wooo magic numbers! 70 is the default volume of an air tank and quad rooting it seems to produce pretty reasonable scaling
+			var/volume_scale = (air_contents.volume / 70) ** (1/4)
+			var/range = (pressure - TANK_FRAGMENT_PRESSURE) * volume_scale / TANK_FRAGMENT_SCALE
 			// (pressure - 5066.25 kpa) divided by 1013.25 kpa
 			range = min(range, 12)
 
 			if(src in bible_contents)
-				for_by_tcl(B, /obj/item/storage/bible)
+				var/bible_count = length(by_type[/obj/item/bible])
+				range /= sqrt(bible_count) // here it uses the old explosion proc which uses range squared for power, hence why we divide by the root of bibles
+				for_by_tcl(B, /obj/item/bible)
 					var/turf/T = get_turf(B.loc)
 					if(T)
 						logTheThing(LOG_BOMBING, src, "exploded at [log_loc(T)], range: [range], last touched by: [src.fingerprintslast]")
-						explosion(src, T, round(range * 0.25), round(range * 0.5), round(range), round(range * 1.5))
-				bible_contents.Remove(src)
+						explosion(src, T, range * 0.25, range * 0.5, range, range * 1.5)
 				qdel(src)
 				return
 			var/turf/epicenter = get_turf(loc)
 			logTheThing(LOG_BOMBING, src, "exploded at [log_loc(epicenter)], , range: [range], last touched by: [src.fingerprintslast]")
-			src.visible_message("<span class='alert'><b>[src] explosively ruptures!</b></span>")
-			explosion(src, epicenter, round(range * 0.25), round(range * 0.5), round(range), round(range * 1.5))
+			src.visible_message(SPAN_ALERT("<b>[src] explosively ruptures!</b>"))
+			explosion(src, epicenter, range * 0.25, range * 0.5, range, range * 1.5)
 			qdel(src)
 
 		else if(pressure > TANK_RUPTURE_PRESSURE)
 			if(integrity <= 0)
 				loc.assume_air(air_contents)
 				air_contents = null
-				src.visible_message("<span class='alert'>[src] violently ruptures!</span>")
+				src.visible_message(SPAN_ALERT("[src] violently ruptures!"))
 				playsound(src.loc, 'sound/impact_sounds/Metal_Hit_Heavy_1.ogg', 60, TRUE)
 				qdel(src)
 			else
@@ -230,22 +232,22 @@ Contains:
 		// thus, we need some tangled logic here to make it work as intended
 		if (istype(src.loc, /obj/item/assembly))
 			if (in_interact_range(src.loc, user) || isobserver(user))
-				. += "<span class='notice'>[bicon(src)] [src] feels [descriptive]</span>"
+				. += SPAN_NOTICE("[bicon(src)] [src] feels [descriptive]")
 			return .
 		. += ..()
 		if (!can_interact)
 			return .
-		. += "<br><span class='notice'>It feels [descriptive]</span>"
+		. += "<br>[SPAN_NOTICE("It feels [descriptive]")]"
 		var/cur_pressure = MIXTURE_PRESSURE(air_contents)
 		if (cur_pressure >= TANK_RUPTURE_PRESSURE)
-			. += "<span class='alert'><b>It's starting to rupture! Better get rid of it quick!</b></span>"
+			. += SPAN_ALERT("<b>It's starting to rupture! Better get rid of it quick!</b>")
 		else if (cur_pressure >= TANK_LEAK_PRESSURE)
-			. += "<br><span class='alert'>It's leaking air!</span>"
+			. += "<br>[SPAN_ALERT("It's leaking air!")]"
 
 	attackby(obj/item/W, mob/user)
 		if (istype(W, /obj/item/clothing/mask/breath))
 			var/obj/item/clothing/mask/breath/B = W
-			boutput(user, "<span class='notice'>You hook up [B] to [src].</span>")
+			boutput(user, SPAN_NOTICE("You hook up [B] to [src]."))
 			B.auto_setup(src, user)
 		else
 			..()
@@ -302,6 +304,12 @@ Contains:
 
 ////////////////////////////////////////////////////////////
 
+/obj/item/tank/empty
+	name = "gas tank"
+	icon_state = "empty"
+
+////////////////////////////////////////////////////////////
+
 /obj/item/tank/anesthetic
 	name = "gas tank (sleeping agent)"
 	icon_state = "anesthetic"
@@ -311,9 +319,7 @@ Contains:
 	New()
 		..()
 		src.air_contents.oxygen = (3 * ONE_ATMOSPHERE) * 70 / (R_IDEAL_GAS_EQUATION * T20C) * O2STANDARD
-		var/datum/gas/sleeping_agent/trace_gas = src.air_contents.get_or_add_trace_gas_by_type(/datum/gas/sleeping_agent)
-		trace_gas.moles = (3 * ONE_ATMOSPHERE) * 70 / (R_IDEAL_GAS_EQUATION * T20C) * N2STANDARD
-		return
+		src.air_contents.nitrous_oxide = (3 * ONE_ATMOSPHERE) * 70 / (R_IDEAL_GAS_EQUATION * T20C) * N2STANDARD
 
 ////////////////////////////////////////////////////////////
 
@@ -322,7 +328,6 @@ TYPEINFO(/obj/item/tank/jetpack)
 
 /obj/item/tank/jetpack
 	name = "jetpack (oxygen)"
-	uses_multiple_icon_states = TRUE
 	w_class = W_CLASS_BULKY
 	force = 8
 	desc = "A jetpack that can use oxygen as a propellant, allowing the wearer to maneuver freely in space. It can also be used as a gas source for internals like a regular tank."
@@ -357,9 +362,9 @@ TYPEINFO(/obj/item/tank/jetpack)
 	proc/toggle()
 		src.on = !(src.on)
 		src.icon_state = "[base_icon_state][src.on]"
-		boutput(usr, "<span class='notice'>You [src.on ? "" : "de"]activate [src]'s propulsion.</span>")
+		boutput(usr, SPAN_NOTICE("You [src.on ? "" : "de"]activate [src]'s propulsion."))
 		playsound(src.loc, 'sound/machines/click.ogg', 30, TRUE)
-		update_icon()
+		UpdateIcon()
 		if (ismob(src.loc))
 			var/mob/M = src.loc
 			M.update_clothing() // Immediately update the worn icon
@@ -412,8 +417,8 @@ TYPEINFO(/obj/item/tank/jetpack)
 	extra_desc = "It's painted in a sinister yet refined shade of red."
 
 	New()
-		..()
 		START_TRACKING_CAT(TR_CAT_NUKE_OP_STYLE)
+		..()
 
 	disposing()
 		STOP_TRACKING_CAT(TR_CAT_NUKE_OP_STYLE)
@@ -425,14 +430,14 @@ TYPEINFO(/obj/item/tank/jetpack/micro)
 /obj/item/tank/jetpack/micro
 	name = "micro-lite jetpack (oxygen)"
 	icon_state = "microjetpack0"
-	item_state = "microjetpack0"
+	item_state = "microjetpack"
 	base_icon_state = "microjetpack"
-	extra_desc = "This one is the smaller variant, suiable for shorter ranged activities."
+	extra_desc = "This one is the smaller variant, suitable for shorter ranged activities."
 	force = 6
 
 	New()
 		..()
-		src.air_contents.volume = 18
+		src.air_contents.volume = 30
 		src.air_contents.oxygen = (1.7 * ONE_ATMOSPHERE) * 70 / (R_IDEAL_GAS_EQUATION * T20C)
 		return
 ////////////////////////////////////////////////////////////
@@ -454,13 +459,14 @@ TYPEINFO(/obj/item/tank/jetpack/micro)
 	name = "pocket oxygen tank"
 	icon_state = "pocket_oxtank"
 	flags = FPRINT | TABLEPASS | CONDUCT
+	c_flags = null
 	health = 5
 	w_class = W_CLASS_TINY
-	force = 1
 	stamina_damage = 20
 	stamina_cost = 8
 	desc = "A tiny personal oxygen tank meant to keep you alive in an emergency. To use, put on a secure mask and open the tank's release valve."
 	distribute_pressure = 17
+	compatible_with_TTV = FALSE
 
 	New()
 		..()
@@ -470,7 +476,7 @@ TYPEINFO(/obj/item/tank/jetpack/micro)
 
 /obj/item/tank/emergency_oxygen/extended
 	name = "extended capacity pocket oxygen tank"
-	desc = "A an extended capacity version of the pocket emergency oxygen tank."
+	desc = "An extended capacity version of the pocket emergency oxygen tank."
 	icon_state = "ex_pocket_oxtank"
 
 	New()
@@ -486,11 +492,10 @@ TYPEINFO(/obj/item/tank/jetpack/micro)
 			src.air_contents.oxygen = null
 			return
 
-
-
 /obj/item/tank/mini_oxygen
 	name = "mini oxygen tank"
 	icon_state = "mini_oxtank"
+	item_state = "em_oxtank"
 	flags = FPRINT | TABLEPASS | CONDUCT
 	c_flags = ONBELT
 	health = 5
@@ -501,10 +506,11 @@ TYPEINFO(/obj/item/tank/jetpack/micro)
 	desc = "A personal oxygen tank meant to keep you alive in an emergency. To use, put on a secure mask and open the tank's release valve."
 	wear_image_icon = 'icons/mob/clothing/belt.dmi'
 	distribute_pressure = 17
+	compatible_with_TTV = FALSE
 
 	New()
 		..()
-		src.air_contents.volume = 8
+		src.air_contents.volume = 15
 		src.air_contents.oxygen = (ONE_ATMOSPHERE / 5) * 70 / (R_IDEAL_GAS_EQUATION * T20C)
 		return
 
@@ -549,13 +555,14 @@ TYPEINFO(/obj/item/tank/jetpack/micro)
 
 		if(src in bible_contents)
 			strength = fuel_moles/20
-			for_by_tcl(B, /obj/item/storage/bible)//world)
+			var/bible_count = length(by_type[/obj/item/bible])
+			strength /= sqrt(bible_count) // here it uses the old explosion proc which uses range squared for power, hence why we divide by the root of bibles
+			for_by_tcl(B, /obj/item/bible)//world)
 				var/turf/T = get_turf(B.loc)
 				if(T)
 					explosion(src, T, 0, strength, strength*2, strength*3)
 			if(src.master)
 				qdel(src.master)
-			bible_contents.Remove(src)
 			qdel(src)
 			return
 

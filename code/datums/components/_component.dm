@@ -74,8 +74,9 @@ var/datum/signal_holder/global_signal_holder
 	parent = raw_args[1]
 	var/list/arguments = raw_args.Copy(2)
 	if(Initialize(arglist(arguments)) == COMPONENT_INCOMPATIBLE)
+		var/datum/parent_value = src.parent //qdel nulls parent!!!
 		qdel(src, TRUE, TRUE)
-		CRASH("Incompatible [type] assigned to a [parent.type]! args: [json_encode(arguments)]")
+		CRASH("Incompatible [type] assigned to a [parent_value.type]! args: [json_encode(arguments)]")
 
 	_JoinParent(parent)
 
@@ -85,6 +86,7 @@ var/datum/signal_holder/global_signal_holder
   * Do not call `qdel(src)` from this function, `return COMPONENT_INCOMPATIBLE` instead
   */
 /datum/component/proc/Initialize(...)
+	SHOULD_CALL_PARENT(TRUE)
 	return
 
 /**
@@ -150,7 +152,7 @@ var/datum/signal_holder/global_signal_holder
 		var/list/components_of_type = dc[I]
 		if(length(components_of_type))	//
 			var/list/subtracted = components_of_type - src
-			if(subtracted.len == 1)	//only 1 guy left
+			if(length(subtracted) == 1)	//only 1 guy left
 				dc[I] = subtracted[1]	//make him special
 			else
 				dc[I] = subtracted
@@ -231,7 +233,7 @@ var/datum/signal_holder/global_signal_holder
 	if(isnull(looked_up)) // Nothing has registered here yet
 		lookup[signal_type] = src
 	else if(looked_up == src) // We already registered here
-		// pass
+		; // pass
 	else if(!length(looked_up)) // One other thing registered here
 		lookup[signal_type] = list((looked_up) = TRUE, (src) = TRUE)
 	else // Many other things have registered here
@@ -254,7 +256,7 @@ var/datum/signal_holder/global_signal_holder
   * * sig_typeor_types Signal string key or list of signal keys to stop listening to specifically
   */
 /datum/proc/UnregisterSignal(datum/target, sig_type_or_types)
-	if (!target)
+	if (!target || !src || src.qdeled)
 		return
 	var/list/lookup = target.comp_lookup
 	if(!signal_procs || (!islist(sig_type_or_types) && (!signal_procs[target] || !lookup)))
@@ -271,7 +273,7 @@ var/datum/signal_holder/global_signal_holder
 				CRASH("Unregistering a complex signal [json_encode(sig)] without its component existing.")
 			comp.unregister(src, sig[2])
 			continue
-		if(!signal_procs[target][sig])
+		if(!signal_procs[target]?[sig])
 			if(!istext(sig))
 				stack_trace("We're unregistering with something that isn't a valid signal \[[sig]\], you fucked up")
 			continue
@@ -431,6 +433,18 @@ var/datum/signal_holder/global_signal_holder
 	if(!components)
 		return list()
 	return islist(components) ? components : list(components)
+
+/**
+  * Calls RemoveComponent on all components of a given type that are attached to this datum
+  *
+  * Arguments:
+  * * c_type The component type path
+  */
+
+/datum/proc/RemoveComponentsOfType(c_type)
+	var/list/datum/component/component_to_remove_list = src.GetComponents(c_type)
+	for (var/datum/component/component_to_remove as anything in component_to_remove_list)
+		component_to_remove.RemoveComponent()
 
 /**
   * Creates an instance of `new_type` in the datum and attaches to it as parent
